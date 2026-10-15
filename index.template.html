@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>返信ひと言</title>
+<meta name="description" content="気になる人の投稿を貼って、気持ちと距離感を選ぶと、返信の下書きを型の違う3案で出します。句読点なし・文字数とユニット数つき。入力はこの端末の中だけで処理し、保存もしません。">
+<style>
+  :root {
+    --bg: #f2f7f7; --surface: #ffffff; --ink: #14201f; --ink2: #34443f; --ink3: #51625d;
+    --line: #cfdcdb; --line-strong: #6d807b; --accent: #0A6B72; --accent-ink: #ffffff; --accent-soft: #dff1f1;
+    --warn-bg: #fff1d6; --warn-ink: #6b4300; --danger: #a8231b;
+    --font: "Hiragino Sans","Yu Gothic","BIZ UDPGothic","Noto Sans JP",system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1717; --surface: #182222; --ink: #eaf3f2; --ink2: #c4d4d1; --ink3: #9db0ac;
+      --line: #2f4240; --line-strong: #7f948f; --accent: #6FCBD2; --accent-ink: #062a2d; --accent-soft: #1b3a3c;
+      --warn-bg: #4a3710; --warn-ink: #ffe2a8; --danger: #ff9a92;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 16px; line-height: 1.6; }
+  main { max-width: 1040px; margin: 0 auto; padding: 16px 16px 32px; }
+  h1 { font-size: 22px; line-height: 1.3; margin: 8px 0 8px; }
+  h2 { font-size: 18px; line-height: 1.4; margin: 0 0 10px; }
+  p { margin: 0 0 10px; }
+  .lead { color: var(--ink2); }
+  .notes { margin: 0 0 16px; padding: 12px 14px 12px 30px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 6px; color: var(--ink2); font-size: 15px; }
+  .notes li { margin: 0 0 4px; } .notes li:last-child { margin: 0; }
+  summary { cursor: pointer; font-weight: 700; padding: 10px 0; min-height: 44px; }
+  details ul { margin: 0 0 12px; padding-left: 1.3em; } details li { margin: 0 0 4px; }
+
+  .layout { display: block; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin: 0 0 16px; }
+  .field { margin: 0 0 16px; } .field:last-child { margin-bottom: 0; }
+  label, .lab { display: block; font-size: 14px; font-weight: 700; color: var(--ink2); margin: 0 0 6px; }
+  .hint { font-size: 13px; color: var(--ink3); margin: 4px 0 0; }
+  input[type="text"], textarea { width: 100%; padding: 8px 10px; font: inherit; font-size: 16px; color: var(--ink); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 6px; }
+  input[type="text"] { min-height: 44px; }
+  textarea { display: block; resize: vertical; line-height: 1.6; }
+  #post { min-height: 120px; }
+  input:focus-visible, textarea:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  button { min-height: 44px; padding: 8px 12px; font: inherit; font-size: 15px; font-weight: 700; color: var(--accent); background: var(--surface); border: 2px solid var(--accent); border-radius: 6px; cursor: pointer; }
+  button.primary, button[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .grid2 button, .grid3 button { width: 100%; font-size: 14px; line-height: 1.35; padding: 6px 8px; }
+  .cands { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .cands button { text-align: left; max-width: 100%; overflow-wrap: anywhere; }
+  .cands .kind { display: block; font-size: 12px; font-weight: 400; opacity: .9; }
+  .picked { font-size: 14px; color: var(--ink2); margin: 0 0 8px; }
+
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 0 0 12px; background: var(--surface); }
+  .card h3 { margin: 0 0 8px; font-size: 16px; line-height: 1.4; }
+  .card h3 .no { display: inline-block; min-width: 2.4em; margin-right: 6px; padding: 0 6px; border-radius: 4px; background: var(--accent-soft); color: var(--ink); font-size: 13px; font-weight: 700; text-align: center; }
+  .stats { font-size: 14px; color: var(--ink2); margin: 6px 0 6px; overflow-wrap: anywhere; }
+  .stats b { color: var(--ink); }
+  .warn { margin: 0 0 8px; padding: 6px 10px; border-radius: 6px; background: var(--warn-bg); color: var(--warn-ink); border-left: 4px solid var(--warn-ink); font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+  .card .hint { margin: 0 0 8px; }
+  .card button { width: 100%; }
+  #status { min-height: 24px; font-size: 14px; font-weight: 700; color: var(--accent); margin: 0 0 8px; }
+
+  .mw-footer { box-sizing: border-box; width: 100%; max-width: 100%; margin: 24px 0 0; padding: 16px; background: #F7F7F8;
+    border: 1px solid #D8D8DC; border-radius: 6px; color: #3A3A3E; font-family: system-ui, sans-serif; font-size: 12px; line-height: 1.7; }
+  .mw-footer p { margin: 0 0 6px; } .mw-footer p:last-child { margin-bottom: 0; } .mw-footer a { color: #0B5AA6; display: inline-block; padding: 13px 0; }
+
+  @media (min-width: 880px) {
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+    .sticky { position: sticky; top: 16px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>返信ひと言</h1>
+  <p class="lead">気になる人の投稿を貼って、気持ちと距離感を選ぶと、返信の下書きを型の違う3案で出します。句読点（。、）は付けず、改行で区切ります。</p>
+  <ul class="notes">
+    <li>貼った投稿と入力は、この端末のブラウザの中だけで処理します。送信せず、保存もしません（ページを閉じると消えます）</li>
+    <li>氏名・連絡先・住所などの個人情報が入った投稿は貼らないでください。@ユーザー名は外してから貼るのがおすすめです</li>
+    <li>相手の投稿の意味を理解して返しているのではありません。言葉の拾い方は機械的で、ずれることがあります。送る前に必ず読み直して、自分の言葉に直してください</li>
+  </ul>
+
+  <div class="layout">
+    <div>
+      <section class="panel" aria-labelledby="in-h">
+        <h2 id="in-h">入れるもの</h2>
+        <div class="field">
+          <label for="post">相手の投稿（貼り付け）</label>
+          <textarea id="post" maxlength="2000" placeholder="気になる投稿の文章を貼ります（空のままでも下書きは出ます）" autocomplete="off"></textarea>
+          <div class="btns" style="margin-top:8px">
+            <button type="button" id="sample">サンプルで試す</button>
+            <button type="button" id="clear">全部消す</button>
+          </div>
+          <p class="hint">サンプルは架空の文です。実在の人の投稿ではありません</p>
+        </div>
+        <div class="field">
+          <span class="lab" id="feel-lab">どんな気持ちで返す？</span>
+          <div class="grid2" id="feelings" role="group" aria-labelledby="feel-lab"></div>
+        </div>
+        <div class="field">
+          <span class="lab" id="dist-lab">相手との距離感</span>
+          <div class="grid3" id="dists" role="group" aria-labelledby="dist-lab"></div>
+          <p class="hint">敬語の強さと一言の長さが変わります</p>
+        </div>
+        <div class="field">
+          <span class="lab" id="cand-lab">返信に入れる言葉（貼った文から拾います）</span>
+          <p class="picked" id="picked"></p>
+          <div class="cands" id="cands" role="group" aria-labelledby="cand-lab"></div>
+          <label for="manual">自分で入れる言葉（任意・入れるとこちらを優先）</label>
+          <input type="text" id="manual" maxlength="40" autocomplete="off" placeholder="例: 完走">
+        </div>
+        <div class="field">
+          <label for="memo">一言メモ（任意・3案目に入ります）</label>
+          <input type="text" id="memo" maxlength="80" autocomplete="off" placeholder="自分の一行を書きます（例: 私も先月から走り始めました）">
+          <p class="hint">句読点（。、）は自動で取り除きます。実在の人や取引先の名前は入れないでください</p>
+        </div>
+      </section>
+    </div>
+
+    <div class="sticky">
+      <section class="panel" aria-labelledby="out-h">
+        <h2 id="out-h">返信の下書き（3案）</h2>
+        <div id="status" role="status"></div>
+        <div id="results"></div>
+        <p class="hint">文字数は文字の数、ユニット数は全角などを2・半角などを1として数えた目安です。Xの実際の数え方と一致しないことがあります。280ユニットは目安で、超えると警告が出ます。条件を変えると案は作り直され、手で直した内容は消えます</p>
+      </section>
+    </div>
+  </div>
+
+  <details class="panel">
+    <summary>見ているもの・見ないもの</summary>
+    <ul>
+      <li>見ているもの: 貼った文の「」の中・#タグ・目立つ言葉（カタカナ・漢字・英単語のうち長いもの）・数字のついた数量（3kg・100人など）</li>
+      <li>見ないもの: 文の意味・書き手の感情や人柄・@ユーザー名・URL・日付</li>
+      <li>作らないもの: 投稿の送信・履歴・保存・書き出し。コピーだけできます</li>
+      <li>返信がつく・関係が深まるといった効果は測っていません。生成した文が自然に読めるかは、使う人が読んで確かめてください</li>
+    </ul>
+  </details>
+
+  <footer class="mw-footer">
+    <p>みちAIワークス（MICHI AI WORKS）／代表 田中　泉</p>
+    <p>運営: <a href="https://michi-portfolio.vercel.app/" rel="noopener">みちAIワークス 公式サイト</a>（https://michi-portfolio.vercel.app/ ）／ お問い合わせ: <a href="mailto:nncf123nncf@gmail.com">nncf123nncf@gmail.com</a></p>
+    <p>貼った投稿と入力した内容はこのページの中（お使いの端末のブラウザ）だけで処理し、サーバーには送信せず、保存もしません。ページを閉じると消えます。アクセス解析（Cloudflare Web Analytics）で、ページの閲覧状況（閲覧数・参照元・ブラウザの種類など）を計測しています。入力した内容は送信しません。</p>
+    <p>このページは返信の下書きを出すだけで、Xなどへの投稿はしません。送る前の確認と判断はご自身で行ってください。</p>
+    <p>ログイン・会員登録・パスワードの入力を求めることはありません。</p>
+  </footer>
+</main>
+
+<script id="core">
+/* 生成の部分（画面を使わない）。source/run-checks.js がここだけを取り出して検算する */
+var RD = (function () {
+  'use strict';
+  // 2ユニットになる文字の範囲 [始, 終, 始, 終 ...]。east_asian_width が W/F/A の文字。source/gen-width-table.py で作成
+  var WIDE = __WT__;
+  function isWide(cp) {
+    var lo = 0, hi = WIDE.length / 2 - 1;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      if (cp < WIDE[mid * 2]) hi = mid - 1; else if (cp > WIDE[mid * 2 + 1]) lo = mid + 1; else return true;
+    }
+    return false;
+  }
+  function units(s) { var n = 0; for (var ch of String(s)) n += isWide(ch.codePointAt(0)) ? 2 : 1; return n; }
+  function chars(s) { return Array.from(String(s)).length; }
+
+  // 句読点を取り除く。「。」「．」→改行 / 「、」「，」「,」→空白 / 「.」は文末か空白の前だけ改行。1,000 や 3.5 の数字は壊さない
+  function clean(s) {
+    s = String(s == null ? '' : s).replace(/\r\n?/g, '\n');
+    s = s.replace(/[。．]/g, '\n');
+    s = s.replace(/(\d)[,，](?=\d)/g, '$1\u0003').replace(/(\d)\.(?=\d)/g, '$1\u0004');
+    s = s.replace(/[、，,]/g, ' ');
+    s = s.replace(/\.(?=\s|$)/g, '\n');
+    s = s.replace(/\u0003/g, ',').replace(/\u0004/g, '.');
+    return s.split('\n').map(function (l) { return l.replace(/[ \t　]+/g, ' ').trim(); }).filter(Boolean).join('\n');
+  }
+  function oneLine(s) { return clean(s).replace(/\n/g, ' ').trim(); }
+
+  var STOP = ['今日', '昨日', '明日', '今年', '去年', '毎日', '最近', '最初', '最後', '自分', '本当', '今回', '以前', '以上', '以下', '一番', '時間', '場合', '問題', '今朝', '今夜', '今度', '全部', '全然', '必要', '結局', '普通', '意外', '結果', '最高', '今週', '来週', '先週', '先月', '来月', '今月', '毎週', '毎月', '皆様', '皆さん', '感じ', '気持', '本日', '現在', '当時', '一緒', '一人', '二人', '大変', '大事', '大切', '自然', '完全', '少し', '普段', '時々', '以外', '一度', '今後', '来年', '昨年'];
+  var UNIT = 'ヶ月|か月|カ月|ヵ月|日間|週間|年間|時間|文字|ページ|キロ|万円|km|kg|cm|mm|ml|%|％|人|回|件|年|週|分|秒|円|個|冊|本|杯|枚|歳|社|店|名|度|倍|割|位|点|行|台|匹|軒|曲|話|章|作|歩|g|m|L|l';
+  var NUM_RE = new RegExp('([0-9０-９]+(?:[,，][0-9０-９]{3})*(?:[.．][0-9０-９]+)?)\\s?(' + UNIT + ')(?![A-Za-z])', 'g');
+
+  function pickWords(post) {
+    var src = String(post == null ? '' : post).replace(/https?:\/\/\S+/g, ' ').replace(/[@＠][A-Za-z0-9_]+/g, ' ');
+    var cands = [];
+    function add(w, kind, minLen) {
+      w = oneLine(w);
+      var n = Array.from(w).length;
+      if (n < (minLen || 2) || n > 24) return;
+      for (var i = 0; i < cands.length; i++) { if (cands[i].w === w) return; }
+      if (cands.length < 5) cands.push({ w: w, kind: kind });
+    }
+    var m, re;
+    re = /[「『]([^「『」』\n]{1,60})[」』]/g;
+    while ((m = re.exec(src))) add(m[1], '「」の中');
+    re = /[#＃]([^\s#＃　、。，．,.!！?？「」『』()（）\[\]【】<>]{1,60})/g;
+    while ((m = re.exec(src))) add(m[1], 'タグ', 1);
+    // 目立つ名詞: カタカナ3字以上・漢字2〜8字・英単語3字以上。長い順
+    var body = src.replace(/[#＃]\S+/g, ' ');
+    var nouns = [];
+    [/[ァ-ヺー]{3,}/g, /[一-鿿々]{2,8}/g, /[A-Za-z][A-Za-z0-9]{2,}/g].forEach(function (r) {
+      var mm;
+      while ((mm = r.exec(body))) {
+        if (STOP.indexOf(mm[0]) >= 0) continue;
+        // 「」で既に拾った語の一部は重ねない
+        var dup = false;
+        for (var i = 0; i < cands.length; i++) { if (cands[i].w.indexOf(mm[0]) >= 0) dup = true; }
+        if (!dup) nouns.push({ w: mm[0], pos: mm.index });
+      }
+    });
+    nouns.sort(function (a, b) { return Array.from(b.w).length - Array.from(a.w).length || a.pos - b.pos; });
+    var taken = 0;
+    for (var k = 0; k < nouns.length && taken < 3; k++) {
+      var before = cands.length; add(nouns[k].w, '目立つ言葉', 2); if (cands.length > before) taken++;
+    }
+    // 数字つきの数量(最初の1件)
+    var num = '';
+    NUM_RE.lastIndex = 0;
+    while ((m = NUM_RE.exec(src))) {
+      var prev = m.index > 0 ? src.charAt(m.index - 1) : '';
+      if (/[#＃A-Za-z0-9０-９]/.test(prev)) continue;
+      var digits = m[1].normalize('NFKC');
+      if (m[2] === '年' && /^\d{4}$/.test(digits)) continue;
+      num = (digits + m[2]).normalize('NFKC');
+      break;
+    }
+    return { cands: cands, num: num };
+  }
+
+  var DISTS = [{ name: '初めて話す' }, { name: '何度か話した' }, { name: '仲がいい' }];
+  var OPEN = ['はじめまして 投稿を拝見しました', 'こんにちは 投稿を読みました', '投稿読んだよ'];
+  var Q = ['差し支えなければ もう少し詳しくお聞きしてもよいですか', 'もう少し詳しく聞いてもいいですか', 'もうちょっと詳しく聞かせて'];
+  var QW = ['「{w}」について 差し支えなければもう少しお聞きしてもよいですか', '「{w}」のこと もう少し聞いてもいいですか', '「{w}」のこと もうちょっと聞かせて'];
+  var NUMLINE = ['{n}という数字が心に残りました', '{n}という数字が印象に残りました', '{n}ってすごいね'];
+  var FEELINGS = [
+    { name: '共感したい', label1: '共感を重ねる', numLine: false,
+      EMP: ['とても共感しました', 'すごく共感しました', 'めっちゃ分かる'],
+      EMP2: ['読みながら何度もうなずいていました', '読みながらうなずいてました', 'うなずきまくりだった'],
+      REACT: ['「{w}」というところが特に心に残りました', '「{w}」のところ とても分かります', '「{w}」のとこ ほんと分かる'],
+      CLOSE: ['お話を聞けてよかったです', 'また読ませてください', 'また聞かせてね'] },
+    { name: 'お礼を伝えたい', label1: 'お礼をまっすぐ伝える', numLine: false,
+      EMP: ['ありがとうございます とても勉強になりました', 'ありがとうございます 参考になりました', 'ありがとう 助かった'],
+      EMP2: ['教えていただけて本当にありがたいです', '教えてもらえて助かりました', '教えてくれてほんと嬉しい'],
+      REACT: ['「{w}」のところ 特に参考になりました', '「{w}」のところ 助かりました', '「{w}」のとこ めっちゃ助かった'],
+      CLOSE: ['これからも拝読します', 'これからも楽しみにしています', 'これからも見てるね'] },
+    { name: '質問したい', label1: '興味を伝える', numLine: false,
+      EMP: ['興味深く拝見しました', '気になって読みました', '気になった'],
+      EMP2: ['もう少し知りたいと思いました', 'もっと知りたくなりました', 'もっと知りたい'],
+      REACT: ['「{w}」のところが特に気になりました', '「{w}」のところ気になりました', '「{w}」のとこ気になる'],
+      CLOSE: ['お時間のあるときに教えていただけたら嬉しいです', '余裕があるときに教えてもらえたら嬉しいです', '気が向いたとき教えて'] },
+    { name: '感想を伝えたい', label1: '感想をひとこと', numLine: true,
+      EMP: ['拝見して心に残りました', '読んでいて楽しかったです', '読んでて楽しかった'],
+      EMP2: ['読み終わったあとも考えていました', '読み終わっても頭に残っています', '読んだあとも頭に残ってる'],
+      REACT: ['「{w}」のところが印象的でした', '「{w}」のところが好きです', '「{w}」のとこ好き'],
+      CLOSE: ['素敵な投稿をありがとうございます', 'いい投稿をありがとうございます', 'いい投稿ありがとう'] },
+    { name: '応援したい', label1: '応援を短く', numLine: true,
+      EMP: ['応援しています', '応援してます', '応援してる'],
+      EMP2: ['陰ながら見守っています', '楽しみに見守っています', 'ずっと見てるよ'],
+      REACT: ['「{w}」の話 これからも楽しみにしています', '「{w}」の話 これからも楽しみです', '「{w}」の話 続き楽しみ'],
+      CLOSE: ['ご活躍を楽しみにしております', '続きも楽しみにしています', '続きも楽しみ'] },
+    { name: '自分の経験を添えたい', label1: '経験に寄り添う', numLine: false,
+      EMP: ['拝見して 自分のことを思い出しました', '読んで 自分のことを思い出しました', '読んで 思い出したよ'],
+      EMP2: ['同じ立場で考えながら読みました', '自分に重ねながら読みました', '自分に重ねて読んじゃった'],
+      REACT: ['「{w}」のところで 特に思い出しました', '「{w}」のところで 特に思い出しました', '「{w}」のとこで 思い出した'],
+      CLOSE: ['少しでも何かの参考になれば嬉しいです', '何かの参考になれば嬉しいです', '参考になれば嬉しいな'] }
+  ];
+  function fill(t, w, n) { return t.split('{w}').join(w).split('{n}').join(n); }
+
+  // opts: { feeling: 0-5, dist: 0-2, word: string, num: string, memo: string } -> [{ type, text, needsMemo }] 3案
+  function build(opts) {
+    var f = FEELINGS[opts.feeling], d = opts.dist;
+    var w = oneLine(opts.word || ''), n = oneLine(opts.num || ''), memo = clean(opts.memo || '');
+    var l1 = [OPEN[d], f.EMP[d], w ? fill(f.REACT[d], w, n) : f.EMP2[d]];
+    if (n && f.numLine) l1.push(fill(NUMLINE[d], w, n));
+    var l2 = [OPEN[d], w ? fill(QW[d], w, n) : Q[d]];
+    var l3 = [f.EMP[d]]; if (memo) l3.push(memo); l3.push(f.CLOSE[d]);
+    function join(a) { return clean(a.join('\n')); }
+    return [
+      { type: f.label1, text: join(l1), needsMemo: false },
+      { type: '質問を返す', text: join(l2), needsMemo: false },
+      { type: '自分の体験を一行足す', text: join(l3), needsMemo: !memo }
+    ];
+  }
+  var LIMIT = 280;
+  return { units: units, chars: chars, clean: clean, oneLine: oneLine, pickWords: pickWords, build: build, FEELINGS: FEELINGS, DISTS: DISTS, LIMIT: LIMIT };
+})();
+</script>
+
+<script id="ui">
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var postEl = $('post'), manualEl = $('manual'), memoEl = $('memo'), resEl = $('results'), statusEl = $('status');
+  var SAMPLE = '今日 初めて3kmを走りきった。走るのが苦手だったので「完走」できただけで泣きそうになった #ランニング初心者';
+  var st = { feeling: 0, dist: 0, sel: -1 };
+  var picks = { cands: [], num: '' };
+
+  function mkGroup(box, items, key, onPick) {
+    box.textContent = '';
+    items.forEach(function (it, i) {
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = it.name;
+      b.setAttribute('aria-pressed', st[key] === i ? 'true' : 'false');
+      b.addEventListener('click', function () { st[key] = i; Array.prototype.forEach.call(box.children, function (c, j) { c.setAttribute('aria-pressed', j === i ? 'true' : 'false'); }); onPick(); });
+      box.appendChild(b);
+    });
+  }
+  function buildCands() {
+    var box = $('cands'); box.textContent = '';
+    var picked = $('picked');
+    picked.textContent = picks.cands.length ? '拾えた言葉: ' + picks.cands.length + '件（押して選び直せます）' : (postEl.value.trim() ? '拾えた言葉はありません（言葉なしの文を作ります）' : '投稿を貼ると、ここに拾った言葉が並びます');
+    if (picks.num) picked.textContent += ' ／ 数量: ' + picks.num + '（感想・応援の1案目に入ります）';
+    var all = picks.cands.map(function (c) { return { label: '「' + c.w + '」', kind: c.kind }; });
+    if (picks.cands.length) all.push({ label: '言葉を入れない', kind: '' });
+    all.forEach(function (c, i) {
+      var idx = i < picks.cands.length ? i : -1;
+      var b = document.createElement('button'); b.type = 'button';
+      b.appendChild(document.createTextNode(c.label));
+      if (c.kind) { var k = document.createElement('span'); k.className = 'kind'; k.textContent = c.kind; b.appendChild(k); }
+      b.setAttribute('aria-pressed', st.sel === idx ? 'true' : 'false');
+      b.addEventListener('click', function () { st.sel = idx; Array.prototype.forEach.call(box.children, function (cb, j) { cb.setAttribute('aria-pressed', (j < picks.cands.length ? j : -1) === idx ? 'true' : 'false'); }); manualEl.value = ''; renderResults(); });
+      box.appendChild(b);
+    });
+  }
+  function activeWord() {
+    var m = RD.oneLine(manualEl.value);
+    if (m) return m;
+    return st.sel >= 0 && picks.cands[st.sel] ? picks.cands[st.sel].w : '';
+  }
+  function say(t) { statusEl.textContent = t; }
+
+  function countsText(ta, statsEl, warnEl) {
+    var t = ta.value, u = RD.units(t), c = RD.chars(t);
+    statsEl.textContent = '';
+    var b1 = document.createElement('b'); b1.textContent = c + '文字'; var b2 = document.createElement('b'); b2.textContent = u + 'ユニット';
+    statsEl.appendChild(document.createTextNode('文字数 ')); statsEl.appendChild(b1); statsEl.appendChild(document.createTextNode(' ／ ユニット数 ')); statsEl.appendChild(b2);
+    if (u > RD.LIMIT) { warnEl.hidden = false; warnEl.textContent = '目安の' + RD.LIMIT + 'ユニットを' + (u - RD.LIMIT) + '超えています。投稿できないとは限りませんが、短くすると確実です'; }
+    else { warnEl.hidden = true; warnEl.textContent = ''; }
+  }
+  function copy(ta, n) {
+    var text = ta.value;
+    function fallback() {
+      var ok = false;
+      try { ta.focus(); ta.select(); ta.setSelectionRange(0, text.length); ok = document.execCommand && document.execCommand('copy'); } catch (e) { ok = false; }
+      say(ok ? '案' + n + 'をコピーしました' : '案' + n + 'を選択しました 長押ししてコピーしてください');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { say('案' + n + 'をコピーしました'); }, fallback);
+    else fallback();
+  }
+  function renderResults() {
+    var plans = RD.build({ feeling: st.feeling, dist: st.dist, word: activeWord(), num: picks.num, memo: memoEl.value });
+    resEl.textContent = ''; say('');
+    plans.forEach(function (p, i) {
+      var card = document.createElement('div'); card.className = 'card';
+      var h = document.createElement('h3'); var no = document.createElement('span'); no.className = 'no'; no.textContent = '案' + (i + 1);
+      h.appendChild(no); h.appendChild(document.createTextNode(p.type)); card.appendChild(h);
+      var ta = document.createElement('textarea'); ta.id = 'plan' + (i + 1); ta.value = p.text; ta.rows = Math.max(3, p.text.split('\n').length + 1); ta.setAttribute('aria-label', '案' + (i + 1) + '（' + p.type + '）の返信'); card.appendChild(ta);
+      var stats = document.createElement('p'); stats.className = 'stats'; card.appendChild(stats);
+      var warn = document.createElement('p'); warn.className = 'warn'; warn.hidden = true; card.appendChild(warn);
+      if (p.needsMemo) { var hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '一言メモを書くと、この案に自分の一行が入ります'; card.appendChild(hint); }
+      var btn = document.createElement('button'); btn.type = 'button'; btn.className = 'primary'; btn.textContent = '案' + (i + 1) + 'をコピー'; card.appendChild(btn);
+      countsText(ta, stats, warn);
+      ta.addEventListener('input', function () { countsText(ta, stats, warn); });
+      btn.addEventListener('click', function () { copy(ta, i + 1); });
+      resEl.appendChild(card);
+    });
+  }
+  function onPost() {
+    picks = RD.pickWords(postEl.value);
+    st.sel = picks.cands.length ? 0 : -1;
+    buildCands(); renderResults();
+  }
+  postEl.addEventListener('input', onPost);
+  manualEl.addEventListener('input', renderResults);
+  memoEl.addEventListener('input', renderResults);
+  $('sample').addEventListener('click', function () { postEl.value = SAMPLE; manualEl.value = ''; onPost(); });
+  $('clear').addEventListener('click', function () { postEl.value = ''; manualEl.value = ''; memoEl.value = ''; st.feeling = 0; st.dist = 0; init(); });
+
+  function init() {
+    mkGroup($('feelings'), RD.FEELINGS, 'feeling', renderResults);
+    mkGroup($('dists'), RD.DISTS, 'dist', renderResults);
+    onPost();
+  }
+  init();
+})();
+</script>
+
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js"
+        data-cf-beacon='{"token": "b4c9f7e78daf4edb84ef52b88633f649"}'></script>
+</body>
+</html>
