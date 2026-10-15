@@ -18,12 +18,16 @@ const POST2 = '煮物のコツは「火を止めて30分置く」こと。味が
   await set(b, 'memo', '私は先月 5キロ歩くのがやっとでした'); await b.sleep(400);
   const lay = await rect('.layout'), out = await rect('.sticky'), inp = await rect('.layout > div:first-child');
   console.log('card1', JSON.stringify({ lay, out, inp }));
+  await b.shot(path.join(OUT, '01-desktop-sample-' + DATE + '.png'), { x: 0, y: Math.max(0, lay.top - 12), width: 1000, height: Math.max(out.bottom, inp.bottom) - lay.top + 20 });
   await b.shot(path.join(OUT, 'source-desktop-full.png'), { x: 0, y: 0, width: 1000, height: await b.ev('document.documentElement.scrollHeight') });
   // Card2: 375px・DPR2。お礼を伝えたい・初めて話す・別の投稿・一言メモは空
   await b.open(PAGE, 375, 900, 2, true);
   await set(b, 'post', POST2); await click(b, '#feelings button', 1); await click(b, '#dists button', 0); await b.sleep(400);
   const h2 = await rect('#out-h'), res = await rect('#results');
   console.log('card2', JSON.stringify({ h2, res, texts: await b.ev(`[...document.querySelectorAll('#results textarea')].map(t=>t.value)`) }));
+  const cards = await b.ev(`[...document.querySelectorAll('#results .card')].map(c=>{const r=c.getBoundingClientRect();return {top:r.top+scrollY,bottom:r.bottom+scrollY}})`);
+  console.log('cards', JSON.stringify(cards));
+  await b.shot(path.join(OUT, '02-mobile375-thanks-' + DATE + '.png'), { x: 0, y: h2.top - 8, width: 375, height: res.bottom - h2.top + 16 });
   await b.shot(path.join(OUT, 'source-mobile375-full.png'), { x: 0, y: 0, width: 375, height: await b.ev('document.documentElement.scrollHeight') });
   b.close(); setTimeout(() => process.exit(0), 300);
 })().catch(e => { console.error(e); process.exit(2); });

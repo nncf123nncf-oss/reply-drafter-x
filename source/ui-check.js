@@ -58,7 +58,7 @@ const ok = (name, c, info) => { if (c) pass++; else { fail++; console.log('NG', 
     await q(`(()=>{const t=document.getElementById('plan1');t.value='あ'.repeat(140);t.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     ok(label + ' warn hidden at 280', await q(`document.querySelector('#results .warn').hidden`));
     // 横スクロール・はみ出し
-    await q(`(()=>{const p=document.getElementById('post');p.value='あ'.repeat(2000);p.dispatchEvent(new Event('input',{bubbles:true}));const m=document.getElementById('manual');m.value='ア'.repeat(40);m.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await q(`(()=>{const p=document.getElementById('post');p.value='あ'.repeat(2000);p.dispatchEvent(new Event('input',{bubbles:true}));const m=document.getElementById('manual');m.value='ア'.repeat(24);m.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     const ov = await q(`({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})`);
     ok(label + ' no horizontal scroll', ov.sw <= ov.cw, ov);
     // コピー(権限が無い環境ではフォールバックの案内が出る)

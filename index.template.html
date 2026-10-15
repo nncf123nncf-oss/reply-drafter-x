@@ -40,7 +40,7 @@
   input[type="text"], textarea { width: 100%; padding: 8px 10px; font: inherit; font-size: 16px; color: var(--ink); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 6px; }
   input[type="text"] { min-height: 44px; }
   textarea { display: block; resize: vertical; line-height: 1.6; }
-  #post { min-height: 120px; }
+  #post { min-height: 120px; } #memo { min-height: 72px; }
   input:focus-visible, textarea:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   .btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
   button { min-height: 44px; padding: 8px 12px; font: inherit; font-size: 15px; font-weight: 700; color: var(--accent); background: var(--surface); border: 2px solid var(--accent); border-radius: 6px; cursor: pointer; }
@@ -110,11 +110,11 @@
           <p class="picked" id="picked"></p>
           <div class="cands" id="cands" role="group" aria-labelledby="cand-lab"></div>
           <label for="manual">自分で入れる言葉（任意・入れるとこちらを優先）</label>
-          <input type="text" id="manual" maxlength="40" autocomplete="off" placeholder="例: 完走">
+          <input type="text" id="manual" maxlength="24" autocomplete="off" placeholder="例: 完走">
         </div>
         <div class="field">
           <label for="memo">一言メモ（任意・3案目に入ります）</label>
-          <input type="text" id="memo" maxlength="80" autocomplete="off" placeholder="自分の一行を書きます（例: 私も先月から走り始めました）">
+          <textarea id="memo" rows="2" maxlength="80" autocomplete="off" placeholder="自分の一行を書きます（例: 私も先月から走り始めました）"></textarea>
           <p class="hint">句読点（。、）は自動で取り除きます。実在の人や取引先の名前は入れないでください</p>
         </div>
       </section>
@@ -134,7 +134,7 @@
     <summary>見ているもの・見ないもの</summary>
     <ul>
       <li>見ているもの: 貼った文の「」の中・#タグ・目立つ言葉（カタカナ・漢字・英単語のうち長いもの）・数字のついた数量（3kg・100人など）</li>
-      <li>見ないもの: 文の意味・書き手の感情や人柄・@ユーザー名・URL・日付</li>
+      <li>見ないもの: 文の意味・書き手の感情や人柄・@から空白までの語（ユーザー名）・URL・日付</li>
       <li>作らないもの: 投稿の送信・履歴・保存・書き出し。コピーだけできます</li>
       <li>返信がつく・関係が深まるといった効果は測っていません。生成した文が自然に読めるかは、使う人が読んで確かめてください</li>
     </ul>
