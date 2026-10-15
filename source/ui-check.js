@@ -16,7 +16,7 @@ const ok = (name, c, info) => { if (c) pass++; else { fail++; console.log('NG', 
     ok(label + ' picked msg', (await q(`document.getElementById('picked').textContent`)).includes('投稿を貼ると'));
     // サンプル
     await q(`document.getElementById('sample').click()`);
-    ok(label + ' sample cands', await q(`[...document.querySelectorAll('#cands button')].map(b=>b.firstChild.textContent).join('|')`) === '「完走」|「ランニング初心者」|「苦手」|言葉を入れない');
+    ok(label + ' sample cands', await q(`[...document.querySelectorAll('#cands button')].map(b=>b.firstChild.textContent).join('|')`) === '「完走」|「ランニング初心者」|「苦手」|言葉を入れない|数量「3km」の一言を入れない');
     ok(label + ' sample in plan1', (await q(`document.getElementById('plan1').value`)).includes('「完走」'));
     // 候補を切り替え・言葉を入れない
     await q(`document.querySelectorAll('#cands button')[1].click()`);
@@ -26,8 +26,15 @@ const ok = (name, c, info) => { if (c) pass++; else { fail++; console.log('NG', 
     // 手入力が優先
     await q(`(()=>{const m=document.getElementById('manual');m.value='ゴール';m.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     ok(label + ' manual wins', (await q(`document.getElementById('plan1').value`)).includes('「ゴール」'));
+    ok(label + ' manual deselects cands', await q(`[...document.querySelectorAll('#cands button')].filter(b=>b.getAttribute('aria-pressed')==='true').length`) === 0);
     await q(`(()=>{const m=document.getElementById('manual');m.value='   ';m.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     ok(label + ' manual blank ignored', !(await q(`document.getElementById('plan1').value`)).includes('「'));
+    // 数量の一言を外す
+    await q(`document.querySelectorAll('#feelings button')[3].click()`);
+    ok(label + ' num on', (await q(`document.getElementById('plan1').value`)).includes('3km'));
+    await q(`document.querySelectorAll('#cands button')[4].click()`);
+    ok(label + ' num off', !(await q(`document.getElementById('plan1').value`)).includes('3km'));
+    await q(`document.querySelectorAll('#cands button')[4].click()`);
     // 気持ち・距離感
     await q(`document.querySelectorAll('#feelings button')[3].click()`);
     await q(`document.querySelectorAll('#dists button')[2].click()`);

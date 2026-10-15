@@ -126,6 +126,20 @@ for (let f = 0; f < 6; f++) {
 eq('S7 all distances differ', same, 0);
 ok('S7 length order (avg units: first > repeat > close)', sum[0] > sum[1] && sum[1] > sum[2], sum);
 
+
+// レビュー①の反映の確認
+let r1 = RD.build({ feeling: 0, dist: 0, word: '', num: '', memo: '私も｡良かった､ね {x} 「」 {n}{w}' })[2].text;
+ok('R1 halfwidth punct/braces removed', !/[｡､{}]/.test(r1) && !/「」/.test(r1), r1);
+r1 = RD.build({ feeling: 0, dist: 0, word: '{n}', num: '3km', memo: '' });
+ok('R2 template marks in word', r1.every(p => !/「」|\{|\}/.test(p.text)), r1.map(p => p.text));
+r1 = RD.build({ feeling: 3, dist: 0, word: '完走', num: '{w}', memo: '' })[0].text;
+ok('R2 template marks in num', !/\{|\}/.test(r1), r1);
+eq('R3 jp mention removed', W('@田中太郎 さん @タナカ さんへ コーヒー'), ['コーヒー']);
+eq('R3 mention fullwidth at', W('＠タナカ です'), []);
+eq('R5 long num skipped', N('1' + '0'.repeat(30) + '人'), '');
+eq('R6 prolonged mark alone', W('すごーーーい'), []);
+eq('R6 english stop', W('This is a great day'), ['great', 'day']);
+
 // 例: サンプル(スクリーンショット用)
 const sp = RD.pickWords('今日 初めて3kmを走りきった。走るのが苦手だったので「完走」できただけで泣きそうになった #ランニング初心者');
 eq('sample picks', [sp.cands.map(c => c.w), sp.num], [['完走', 'ランニング初心者', '苦手'], '3km']);

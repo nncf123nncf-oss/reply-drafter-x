@@ -168,22 +168,22 @@ var RD = (function () {
 
   // 句読点を取り除く。「。」「．」→改行 / 「、」「，」「,」→空白 / 「.」は文末か空白の前だけ改行。1,000 や 3.5 の数字は壊さない
   function clean(s) {
-    s = String(s == null ? '' : s).replace(/\r\n?/g, '\n');
-    s = s.replace(/[。．]/g, '\n');
+    s = String(s == null ? '' : s).replace(/\r\n?/g, '\n').replace(/[{}\u0003\u0004]/g, ' ').replace(/[「『]\s*[」』]/g, ' ');
+    s = s.replace(/[。．｡]/g, '\n');
     s = s.replace(/(\d)[,，](?=\d)/g, '$1\u0003').replace(/(\d)\.(?=\d)/g, '$1\u0004');
-    s = s.replace(/[、，,]/g, ' ');
+    s = s.replace(/[、，､,]/g, ' ');
     s = s.replace(/\.(?=\s|$)/g, '\n');
     s = s.replace(/\u0003/g, ',').replace(/\u0004/g, '.');
     return s.split('\n').map(function (l) { return l.replace(/[ \t　]+/g, ' ').trim(); }).filter(Boolean).join('\n');
   }
   function oneLine(s) { return clean(s).replace(/\n/g, ' ').trim(); }
 
-  var STOP = ['今日', '昨日', '明日', '今年', '去年', '毎日', '最近', '最初', '最後', '自分', '本当', '今回', '以前', '以上', '以下', '一番', '時間', '場合', '問題', '今朝', '今夜', '今度', '全部', '全然', '必要', '結局', '普通', '意外', '結果', '最高', '今週', '来週', '先週', '先月', '来月', '今月', '毎週', '毎月', '皆様', '皆さん', '感じ', '気持', '本日', '現在', '当時', '一緒', '一人', '二人', '大変', '大事', '大切', '自然', '完全', '少し', '普段', '時々', '以外', '一度', '今後', '来年', '昨年'];
+  var STOP = ['this', 'that', 'with', 'have', 'from', 'there', 'they', 'what', 'when', 'will', 'would', 'about', 'just', '今日', '昨日', '明日', '今年', '去年', '毎日', '最近', '最初', '最後', '自分', '本当', '今回', '以前', '以上', '以下', '一番', '時間', '場合', '問題', '今朝', '今夜', '今度', '全部', '全然', '必要', '結局', '普通', '意外', '結果', '最高', '今週', '来週', '先週', '先月', '来月', '今月', '毎週', '毎月', '皆様', '皆さん', '感じ', '気持', '本日', '現在', '当時', '一緒', '一人', '二人', '大変', '大事', '大切', '自然', '完全', '少し', '普段', '時々', '以外', '一度', '今後', '来年', '昨年'];
   var UNIT = 'ヶ月|か月|カ月|ヵ月|日間|週間|年間|時間|文字|ページ|キロ|万円|km|kg|cm|mm|ml|%|％|人|回|件|年|週|分|秒|円|個|冊|本|杯|枚|歳|社|店|名|度|倍|割|位|点|行|台|匹|軒|曲|話|章|作|歩|g|m|L|l';
   var NUM_RE = new RegExp('([0-9０-９]+(?:[,，][0-9０-９]{3})*(?:[.．][0-9０-９]+)?)\\s?(' + UNIT + ')(?![A-Za-z])', 'g');
 
   function pickWords(post) {
-    var src = String(post == null ? '' : post).replace(/https?:\/\/\S+/g, ' ').replace(/[@＠][A-Za-z0-9_]+/g, ' ');
+    var src = String(post == null ? '' : post).replace(/https?:\/\/\S+/g, ' ').replace(/[@＠][^\s@＠]+/g, ' ');
     var cands = [];
     function add(w, kind, minLen) {
       w = oneLine(w);
@@ -200,10 +200,10 @@ var RD = (function () {
     // 目立つ名詞: カタカナ3字以上・漢字2〜8字・英単語3字以上。長い順
     var body = src.replace(/[#＃]\S+/g, ' ');
     var nouns = [];
-    [/[ァ-ヺー]{3,}/g, /[一-鿿々]{2,8}/g, /[A-Za-z][A-Za-z0-9]{2,}/g].forEach(function (r) {
+    [/[ァ-ヺ][ァ-ヺー]{2,}/g, /[一-鿿々]{2,8}/g, /[A-Za-z][A-Za-z0-9]{2,}/g].forEach(function (r) {
       var mm;
       while ((mm = r.exec(body))) {
-        if (STOP.indexOf(mm[0]) >= 0) continue;
+        if (STOP.indexOf(mm[0]) >= 0 || STOP.indexOf(mm[0].toLowerCase()) >= 0) continue;
         // 「」で既に拾った語の一部は重ねない
         var dup = false;
         for (var i = 0; i < cands.length; i++) { if (cands[i].w.indexOf(mm[0]) >= 0) dup = true; }
@@ -224,6 +224,7 @@ var RD = (function () {
       var digits = m[1].normalize('NFKC');
       if (m[2] === '年' && /^\d{4}$/.test(digits)) continue;
       num = (digits + m[2]).normalize('NFKC');
+      if (num.length > 12) { num = ''; continue; }
       break;
     }
     return { cands: cands, num: num };
@@ -266,7 +267,7 @@ var RD = (function () {
       REACT: ['「{w}」のところで 特に思い出しました', '「{w}」のところで 特に思い出しました', '「{w}」のとこで 思い出した'],
       CLOSE: ['少しでも何かの参考になれば嬉しいです', '何かの参考になれば嬉しいです', '参考になれば嬉しいな'] }
   ];
-  function fill(t, w, n) { return t.split('{w}').join(w).split('{n}').join(n); }
+  function fill(t, w, n) { return t.replace(/\{([wn])\}/g, function (m, k) { return k === 'w' ? w : n; }); }
 
   // opts: { feeling: 0-5, dist: 0-2, word: string, num: string, memo: string } -> [{ type, text, needsMemo }] 3案
   function build(opts) {
@@ -294,7 +295,7 @@ var RD = (function () {
   var $ = function (id) { return document.getElementById(id); };
   var postEl = $('post'), manualEl = $('manual'), memoEl = $('memo'), resEl = $('results'), statusEl = $('status');
   var SAMPLE = '今日 初めて3kmを走りきった。走るのが苦手だったので「完走」できただけで泣きそうになった #ランニング初心者';
-  var st = { feeling: 0, dist: 0, sel: -1 };
+  var st = { feeling: 0, dist: 0, sel: -1, numOff: false };
   var picks = { cands: [], num: '' };
 
   function mkGroup(box, items, key, onPick) {
@@ -313,15 +314,22 @@ var RD = (function () {
     if (picks.num) picked.textContent += ' ／ 数量: ' + picks.num + '（感想・応援の1案目に入ります）';
     var all = picks.cands.map(function (c) { return { label: '「' + c.w + '」', kind: c.kind }; });
     if (picks.cands.length) all.push({ label: '言葉を入れない', kind: '' });
+    var manualOn = !!RD.oneLine(manualEl.value);
     all.forEach(function (c, i) {
       var idx = i < picks.cands.length ? i : -1;
       var b = document.createElement('button'); b.type = 'button';
       b.appendChild(document.createTextNode(c.label));
       if (c.kind) { var k = document.createElement('span'); k.className = 'kind'; k.textContent = c.kind; b.appendChild(k); }
-      b.setAttribute('aria-pressed', st.sel === idx ? 'true' : 'false');
-      b.addEventListener('click', function () { st.sel = idx; Array.prototype.forEach.call(box.children, function (cb, j) { cb.setAttribute('aria-pressed', (j < picks.cands.length ? j : -1) === idx ? 'true' : 'false'); }); manualEl.value = ''; renderResults(); });
+      b.setAttribute('aria-pressed', !manualOn && st.sel === idx ? 'true' : 'false');
+      b.addEventListener('click', function () { st.sel = idx; manualEl.value = ''; buildCands(); renderResults(); });
       box.appendChild(b);
     });
+    if (picks.num) {
+      var nb = document.createElement('button'); nb.type = 'button'; nb.textContent = '数量「' + picks.num + '」の一言を入れない';
+      nb.setAttribute('aria-pressed', st.numOff ? 'true' : 'false');
+      nb.addEventListener('click', function () { st.numOff = !st.numOff; nb.setAttribute('aria-pressed', st.numOff ? 'true' : 'false'); renderResults(); });
+      box.appendChild(nb);
+    }
   }
   function activeWord() {
     var m = RD.oneLine(manualEl.value);
@@ -339,7 +347,7 @@ var RD = (function () {
     else { warnEl.hidden = true; warnEl.textContent = ''; }
   }
   function copy(ta, n) {
-    var text = ta.value;
+    var text = ta.value; say('');
     function fallback() {
       var ok = false;
       try { ta.focus(); ta.select(); ta.setSelectionRange(0, text.length); ok = document.execCommand && document.execCommand('copy'); } catch (e) { ok = false; }
@@ -348,8 +356,9 @@ var RD = (function () {
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { say('案' + n + 'をコピーしました'); }, fallback);
     else fallback();
   }
+  function fit(ta) { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 2) + 'px'; }
   function renderResults() {
-    var plans = RD.build({ feeling: st.feeling, dist: st.dist, word: activeWord(), num: picks.num, memo: memoEl.value });
+    var plans = RD.build({ feeling: st.feeling, dist: st.dist, word: activeWord(), num: st.numOff ? '' : picks.num, memo: memoEl.value });
     resEl.textContent = ''; say('');
     plans.forEach(function (p, i) {
       var card = document.createElement('div'); card.className = 'card';
@@ -358,24 +367,28 @@ var RD = (function () {
       var ta = document.createElement('textarea'); ta.id = 'plan' + (i + 1); ta.value = p.text; ta.rows = Math.max(3, p.text.split('\n').length + 1); ta.setAttribute('aria-label', '案' + (i + 1) + '（' + p.type + '）の返信'); card.appendChild(ta);
       var stats = document.createElement('p'); stats.className = 'stats'; card.appendChild(stats);
       var warn = document.createElement('p'); warn.className = 'warn'; warn.hidden = true; card.appendChild(warn);
-      if (p.needsMemo) { var hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '一言メモを書くと、この案に自分の一行が入ります'; card.appendChild(hint); }
+      if (p.needsMemo) { var hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '一言メモを書くと、この案に自分の一行が入ります。今のままでは何の話か伝わりにくい案です'; card.appendChild(hint); }
       var btn = document.createElement('button'); btn.type = 'button'; btn.className = 'primary'; btn.textContent = '案' + (i + 1) + 'をコピー'; card.appendChild(btn);
       countsText(ta, stats, warn);
-      ta.addEventListener('input', function () { countsText(ta, stats, warn); });
+      ta.addEventListener('input', function () { countsText(ta, stats, warn); fit(ta); });
       btn.addEventListener('click', function () { copy(ta, i + 1); });
       resEl.appendChild(card);
+      fit(ta);
     });
   }
   function onPost() {
+    var prevWord = st.sel >= 0 && picks.cands[st.sel] ? picks.cands[st.sel].w : null, wasNone = st.sel === -1 && picks.cands.length > 0;
     picks = RD.pickWords(postEl.value);
-    st.sel = picks.cands.length ? 0 : -1;
+    var keep = -1;
+    if (prevWord !== null) picks.cands.forEach(function (c, i) { if (c.w === prevWord) keep = i; });
+    st.sel = picks.cands.length ? (keep >= 0 ? keep : (wasNone ? -1 : 0)) : -1;
     buildCands(); renderResults();
   }
   postEl.addEventListener('input', onPost);
-  manualEl.addEventListener('input', renderResults);
+  manualEl.addEventListener('input', function () { buildCands(); renderResults(); });
   memoEl.addEventListener('input', renderResults);
   $('sample').addEventListener('click', function () { postEl.value = SAMPLE; manualEl.value = ''; onPost(); });
-  $('clear').addEventListener('click', function () { postEl.value = ''; manualEl.value = ''; memoEl.value = ''; st.feeling = 0; st.dist = 0; init(); });
+  $('clear').addEventListener('click', function () { postEl.value = ''; manualEl.value = ''; memoEl.value = ''; st.feeling = 0; st.dist = 0; st.numOff = false; st.sel = -1; init(); });
 
   function init() {
     mkGroup($('feelings'), RD.FEELINGS, 'feeling', renderResults);
