@@ -8,8 +8,9 @@ async function launch(port) {
   const chrome = cp.spawn(CHROME, ['--headless=new', '--remote-debugging-port=' + port, '--user-data-dir=' + path.join(tmp, 'prof'), '--no-first-run', '--disable-gpu', 'about:blank'], { stdio: 'ignore' });
   let t; for (let i = 0; i < 50; i++) { try { t = await getJson('http://127.0.0.1:' + port + '/json'); if (t.length) break; } catch (e) { } await sleep(200); }
   const ws = new WebSocket(t.find(x => x.type === 'page').webSocketDebuggerUrl); await new Promise(r => ws.addEventListener('open', r));
-  let id = 0; const pend = {};
-  ws.addEventListener('message', e => { const m = JSON.parse(e.data); if (m.id && pend[m.id]) { pend[m.id](m); delete pend[m.id]; } });
+  let id = 0; const pend = {}; const handlers = [];
+  ws.addEventListener('message', e => { const m = JSON.parse(e.data); if (m.id && pend[m.id]) { pend[m.id](m); delete pend[m.id]; } else if (m.method) handlers.forEach(h => h(m)); });
+  const on = fn => handlers.push(fn);
   const send = (method, params = {}) => new Promise(r => { const i = ++id; pend[i] = r; ws.send(JSON.stringify({ id: i, method, params })); });
   const ev = async x => { const r = (await send('Runtime.evaluate', { expression: x, awaitPromise: true, returnByValue: true })).result; if (r.exceptionDetails) throw new Error(JSON.stringify(r.exceptionDetails).slice(0, 300)); return r.result.value; };
   await send('Runtime.enable'); await send('Page.enable'); await send('DOM.enable');
@@ -24,6 +25,6 @@ async function launch(port) {
   }
   async function pick(sel, file) { const doc = (await send('DOM.getDocument', { depth: 0 })).result.root.nodeId; const q = (await send('DOM.querySelector', { nodeId: doc, selector: sel })).result.nodeId; await send('DOM.setFileInputFiles', { nodeId: q, files: [file] }); await sleep(800); }
   function close() { ws.close(); chrome.kill(); try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { } }
-  return { send, ev, open, shot, pick, close, sleep };
+  return { send, ev, open, shot, pick, close, sleep, on };
 }
 module.exports = { launch, sleep };

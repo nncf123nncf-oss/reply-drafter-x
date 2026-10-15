@@ -144,9 +144,115 @@ eq('R6 english stop', W('This is a great day'), ['great', 'day']);
 const sp = RD.pickWords('今日 初めて3kmを走りきった。走るのが苦手だったので「完走」できただけで泣きそうになった #ランニング初心者');
 eq('sample picks', [sp.cands.map(c => c.w), sp.num], [['完走', 'ランニング初心者', '苦手'], '3km']);
 
+// S10 Ollamaモードの後処理(不合格例・境界例)
+const SRC = '今日 初めて3kmを走りきった。「完走」できた #ランニング初心者 私は先月 5キロ歩くのがやっとでした';
+const J = (raw, o) => RD.judge(raw, Object.assign({ dist: 1, source: SRC }, o || {}));
+const rs = (r) => r.reasons.join('|');
+eq('S10 sanitize punct', RD.sanitizeAI('すごいですね！頑張りましょう。応援してます、ね?'), 'すごいですね\n頑張りましょう\n応援してます ね');
+eq('S10 sanitize emoji', RD.sanitizeAI('おめでとう🎉🎉 すごい😀'), 'おめでとう すごい');
+eq('S10 sanitize label', RD.sanitizeAI('案1: 完走おめでとうございます\n- 次も楽しみです'), '完走おめでとうございます\n次も楽しみです');
+eq('S10 sanitize quotes md', RD.sanitizeAI('**完走**したんですね "すごい"'), '完走 したんですね すごい');
+ok('S10 clean pass', J('「完走」のところ 励みになりました\nありがとうございます').ok, J('「完走」のところ 励みになりました\nありがとうございます'));
+ok('S10 punct removed in text', !/[。、！？!?]/.test(J('「完走」できたのですね！すごいです。').text), J('「完走」できたのですね！すごいです。').text);
+['はじめまして 完走おめでとうございます', '初めまして 完走おめでとうございます', 'こんにちは 完走おめでとうございます', '拝見しました 完走おめでとうございます', '拝読しました 完走おめでとうございます', '読ませていただきました 完走おめでとうございます', '読みました 完走おめでとうございます'].forEach((t, i) => ok('S10 NG word ' + i, !J(t).ok && /NG語/.test(rs(J(t))), J(t)));
+// 事実ガード: 数字
+ok('S10 number ok (3km)', J('3kmも走ったのですね すごいです').ok, J('3kmも走ったのですね すごいです'));
+ok('S10 number fullwidth ok', J('３kmも走ったのですね すごいです').ok);
+ok('S10 number 5 from memo ok', J('先月は5キロがやっとだったのですね すごいです').ok);
+ok('S10 number invented ng', !J('10kmも走ったのですね すごいです').ok && /元にない数字\(10\)/.test(rs(J('10kmも走ったのですね すごいです'))));
+ok('S10 number 30 vs 3 ng', !J('30分も走ったのですね すごいです').ok);
+eq('S10 sanitize keeps leading decimal', RD.sanitizeAI('3.5kmも走った\n2. 次の案'), '3.5kmも走った\n次の案');
+ok('S10 decimal ng', !J('3.5kmも走ったのですね すごいです').ok);
+ok('S10 comma number', J('1,000人の話ですね すごいです', { source: '1000人が来た' }).ok, J('1,000人の話ですね すごいです', { source: '1000人が来た' }));
+ok('S10 no numbers in source, number in output ng', !J('2人で走ったのですね すごいです', { source: '走った' }).ok);
+// 事実ガード: 「」の語
+ok('S10 quote in source ok', J('「完走」できたのですね すごいです').ok);
+ok('S10 quote not in source ng', !J('「優勝」できたのですね すごいです').ok && /元にない「」の語\(優勝\)/.test(rs(J('「優勝」できたのですね すごいです'))));
+ok('S10 quote spaced tolerant', J('「完 走」できたのですね すごいです').ok);
+ok('S10 quote from memo ok', J('「5キロ歩く」ところから始めたのですね すごいです').ok);
+ok('S10 quote from word ok', J('「ゴール」までよく走りましたね すごいです', { source: '走った\nゴール' }).ok);
+ok('S10 quote double-bracket ng', !J('『優勝』できたのですね すごいです').ok);
+// 長さ
+const L = (n) => 'あ'.repeat(n);
+ok('S10 empty ng', !J('').ok && !J('   ').ok && !J('！？。').ok && rs(J('')) === '空');
+ok('S10 len 120 ok', J(L(120)).ok, J(L(120)).reasons);
+ok('S10 len 121 ng', !J(L(121)).ok && /長すぎる/.test(rs(J(L(121)))));
+ok('S10 len 10 ok', J(L(10)).ok);
+ok('S10 len 9 ng', !J(L(9)).ok && /短すぎる/.test(rs(J(L(9)))));
+ok('S10 len counts after cleaning', J(L(120) + '。。。').ok);
+// 距離感
+const T1 = '完走おめでとうございます\n頑張りましたね\nありがとうございます';
+ok('S10 close w/ polite ng', !J(T1, { dist: 2 }).ok && /距離感/.test(rs(J(T1, { dist: 2 }))));
+ok('S10 close w/ casual ok', J('「完走」すごいね\n頑張ったんだね\n本当に励みになったよ', { dist: 2 }).ok, J('「完走」すごいね\n頑張ったんだね\n本当に励みになったよ', { dist: 2 }));
+ok('S10 first w/ casual ng', !J('完走したんだね\n頑張ったんだね\n励みになったよ', { dist: 0 }).ok);
+ok('S10 first w/ polite ok', J('完走されたのですね\n励みになりました\nありがとうございます', { dist: 0 }).ok);
+ok('S10 mid accepts both', J('完走したんだね\n励みになりました', { dist: 1 }).ok && J('完走されたのですね\n励みになりました', { dist: 1 }).ok);
+ok('S10 close boundary 1 of 2 polite ng (any polite line)', !J('完走すごいね\n励みになりました', { dist: 2 }).ok);
+ok('S10 close all casual ok', J('完走すごいね\n励みになったよ', { dist: 2 }).ok);
+ok('S10 lines 3 ok / 4 ng', J('完走すごいね\n頑張ったね\n励みになったよ', { dist: 2 }).ok && !J('完走すごいね\n頑張ったね\n励みになったよ\nまたね', { dist: 2 }).ok);
+ok('S10 15 short lines ng', !J(Array(15).fill('完走').join('\n'), { dist: 1 }).ok && /行が多い/.test(rs(J(Array(15).fill('完走').join('\n'), { dist: 1 }))));
+ok('S10 url / mention ng', !J('完走のお話 https://example.com 励みです').ok && !J('@someone 完走のお話 励みです').ok && !J('＠タナカ 完走のお話 励みです').ok);
+ok('S10 kanji numeral invented ng', !J('三日続けたのですね 励みになりました').ok && /元にない漢数字\(三日\)/.test(rs(J('三日続けたのですね 励みになりました'))));
+ok('S10 kanji numeral in source ok', J('三日続けたのですね 励みになりました', { source: '三日続けた' }).ok);
+ok('S10 common kanji words not flagged', J('一番うれしいのは 一緒に走れたことですね 一言だけ').ok);
+ok('S10 close boundary 2 of 3 polite ng', !J('完走すごいです\n励みになりました\nありがとう', { dist: 2 }).ok);
+ok('S10 first boundary 1 of 2 casual ok', J('完走されたのですね\n励みになったよ', { dist: 0 }).ok);
+ok('S10 ambiguous endings not flagged', J('完走おめでとう\n頑張ったよ\nありがとう', { dist: 0 }).ok, J('完走おめでとう\n頑張ったよ\nありがとう', { dist: 0 }));
+// parsePlans
+eq('S10 parse plain', RD.parsePlans('{"plans":["a","b","c"]}'), ['a', 'b', 'c']);
+eq('S10 parse fence', RD.parsePlans('```json\n{"plans":["a","b","c"]}\n```'), ['a', 'b', 'c']);
+eq('S10 parse prefix text', RD.parsePlans('はい こちらです {"plans":["a","b","c"]} 以上'), ['a', 'b', 'c']);
+eq('S10 parse array', RD.parsePlans('["a","b","c"]'), ['a', 'b', 'c']);
+eq('S10 parse object keys', RD.parsePlans('{"1":"a","2":"b","3":"c"}'), ['a', 'b', 'c']);
+eq('S10 parse objs with text', RD.parsePlans('{"plans":[{"text":"a"},{"text":"b"},{"text":"c"}]}'), ['a', 'b', 'c']);
+eq('S10 parse 4 to 3', RD.parsePlans('{"plans":["a","b","c","d"]}'), ['a', 'b', 'c']);
+eq('S10 parse 2', RD.parsePlans('{"plans":["a","b"]}'), ['a', 'b']);
+eq('S10 parse invalid', RD.parsePlans('これはJSONではありません'), null);
+eq('S10 parse truncated json keeps the strings', RD.parsePlans('{"plans":["a","b"'), ['a', 'b']);
+eq('S10 parse real malformed output (newline mark outside string)', RD.parsePlans('{"plans":["x1"],\\n"x2",\\n"x3"]}'), ['x1', 'x2', 'x3']);
+eq('S10 parse escaped newline inside', RD.parsePlans('{"plans":["a\\nb","c"]}'), ['a\nb', 'c']);
+eq('S10 parse empty/null/{}', [RD.parsePlans(''), RD.parsePlans(null), RD.parsePlans('{}')], [null, null, null]);
+eq('S10 parse non-string item', RD.parsePlans('{"plans":[1,null,"c"]}'), ['', '', 'c']);
+// evaluate / pickBest
+const CT = { dist: 1, source: '今日 初めて3kmを走りきった。「完走」できた' };
+const good = ['「完走」のところ 励みになりました', '3kmも走ったのですね もう少し教えてください', 'ありがとうございます\n励みになりました'];
+let ev = RD.evaluate(good, CT);
+eq('S10 evaluate all ok', ev.map(e => e.ok), [true, true, true]);
+eq('S10 failCount 0', RD.failCount(ev), 0);
+ev = RD.evaluate([good[0], good[0], 'はじめまして 励みになりました'], CT);
+eq('S10 evaluate dup + NG', ev.map(e => e.ok), [true, false, false]);
+ok('S10 dup reason', /他の案と同じ/.test(rs(ev[1])), ev[1]);
+ev = RD.evaluate(['「完走」のところ 励みになりました'], CT);
+eq('S10 evaluate missing', ev.map(e => e.ok), [true, false, false]);
+eq('S10 failCount 2', RD.failCount(ev), 2);
+eq('S10 evaluate null list', RD.evaluate(null, CT).map(e => e.ok), [false, false, false]);
+const e1 = RD.evaluate([good[0], 'こんにちは 励みになりました', '10kmも走りましたね すごいです'], CT), e2 = RD.evaluate(['拝見しました 励みになりました', good[1], good[2]], CT);
+eq('S10 pickBest combine', RD.pickBest([e1, e2]), [good[0], good[1], good[2]]);
+eq('S10 pickBest fallback null', RD.pickBest([e1]), [good[0], null, null]);
+eq('S10 pickBest none', RD.pickBest([]), [null, null, null]);
+eq('S10 pickBest no dup across attempts', RD.pickBest([RD.evaluate([good[0], 'x', 'x'], CT), RD.evaluate([good[0], good[1], good[2]], CT)]), [good[0], good[1], good[2]]);
+// buildPrompt
+const BP = RD.buildPrompt({ feeling: 1, dist: 2, post: '今日 3kmを走った', word: '完走', num: '3km', memo: '' });
+ok('S10 prompt: feeling required in all 3', BP.system.includes('お礼を伝えたい') && BP.system.includes('3案すべてに必ず込める') && BP.system.includes('感謝'), BP.system);
+ok('S10 prompt style close', BP.system.includes('タメ口'));
+ok('S10 prompt: no invented memo when empty', BP.system.includes('自分の体験は書かず') && !BP.user.includes('自分の一言'));
+ok('S10 prompt user has post/word', BP.user.includes('今日 3kmを走った') && BP.user.includes('触れてほしい言葉: 完走'));
+const BP2 = RD.buildPrompt({ feeling: 0, dist: 0, post: 'x', word: '', num: '', memo: '朝は走る、夜は休む。' });
+ok('S10 prompt memo cleaned', BP2.system.includes('「朝は走る 夜は休む」') && BP2.user.includes('自分の一言: 朝は走る 夜は休む') && !BP2.user.includes('触れてほしい言葉'), BP2.user);
+ok('S10 prompt post cap 2000', RD.buildPrompt({ feeling: 0, dist: 0, post: 'あ'.repeat(5000), word: '', num: '', memo: '' }).user.length < 2200);
+for (let f = 0; f < 6; f++) for (let d = 0; d < 3; d++) { const p = RD.buildPrompt({ feeling: f, dist: d, post: 'p', word: '', num: '', memo: '' }); ok('S10 prompt f' + f + 'd' + d, p.system.includes(RD.FEELINGS[f].name) && p.user.includes(RD.DISTS[d].name)); }
+
 // S9 静的チェック: 保存系・外部送信が無い
 const noStrip = html.replace(/<script id="core">[\s\S]*?<\/script>/, '');
-['localStorage', 'sessionStorage', 'indexedDB', 'download', 'navigator.share', 'XMLHttpRequest', 'fetch(', 'innerHTML', 'insertAdjacentHTML', 'eval(', 'document.write', 'location.hash', 'history.'].forEach(k => ok('S9 no ' + k, !html.includes(k), k));
+['localStorage', 'sessionStorage', 'indexedDB', 'download', 'navigator.share', 'XMLHttpRequest', 'innerHTML', 'insertAdjacentHTML', 'eval(', 'document.write', 'location.hash', 'history.'].forEach(k => ok('S9 no ' + k, !html.includes(k), k));
+// S9b 通信先: fetch は localhost:11434 だけ(Ollamaモード)。それ以外の外部送信を足していない
+ok('S9b fetch only via OLLAMA base', (html.match(/fetch\(([^,)]*)/g) || []).every(x => /fetch\(OLLAMA \+ '\/api\/(tags|chat)'$/.test(x)), html.match(/fetch\(([^,)]*)/g));
+eq('S9b fetch count', (html.match(/fetch\(/g) || []).length, 2);
+ok('S9b OLLAMA const is localhost:11434', html.includes("var OLLAMA = 'http://localhost:11434';"));
+const urls = [...new Set((html.match(/https?:\/\/[^\s"'<>)）、。]+/g) || []).map(u => u.replace(/\/+$/, '')))].sort();
+eq('S9b all urls', urls, ['http://localhost:11434', 'https://michi-portfolio.vercel.app', 'https://nncf123nncf-oss.github.io', 'https://static.cloudflareinsights.com/beacon.min.js']);
+ok('S9b no wildcard origin advice', !/OLLAMA_ORIGINS[^\n]*\*/.test(html.replace(/すべてを許可する設定（\*）/g, '')), 'wildcard');
+ok('S9b no sendBeacon/WebSocket/EventSource', !/sendBeacon|WebSocket|EventSource|importScripts/.test(html));
 ok('S9 clipboard only writeText', (html.match(/clipboard\.\w+/g) || []).every(x => x === 'clipboard.writeText'), html.match(/clipboard\.\w+/g));
 ok('S9 no short url', !/(forms\.gle|lin\.ee|bit\.ly|t\.co\/)/.test(html));
 ok('S9 no href=#', !/href="#"/.test(html));

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>返信ひと言</title>
-<meta name="description" content="気になる人の投稿を貼って、気持ちと距離感を選ぶと、返信の下書きを型の違う3案で出します。句読点なし・文字数とユニット数つき。入力はこの端末の中だけで処理し、保存もしません。">
+<meta name="description" content="気になる人の投稿を貼って、気持ちと距離感を選ぶと、返信の下書きを型の違う3案で出します。句読点なし・文字数とユニット数つき。入力は標準ではこの端末の中だけで処理し、保存もしません。">
 <style>
   :root {
     --bg: #f2f7f7; --surface: #ffffff; --ink: #14201f; --ink2: #34443f; --ink3: #51625d;
@@ -63,6 +63,18 @@
   .card button { width: 100%; }
   #status { min-height: 24px; font-size: 14px; font-weight: 700; color: var(--accent); margin: 0 0 8px; }
 
+  .badge { display: inline-block; margin-left: 6px; padding: 0 8px; border-radius: 4px; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700; }
+  .aibox { margin: 0 0 12px; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: 8px; }
+  .aibox .lab { margin-bottom: 4px; }
+  .aibar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 6px; }
+  .aibar select { flex: 1 1 140px; min-width: 0; }
+  select { min-height: 44px; padding: 6px 8px; font: inherit; font-size: 16px; color: var(--ink); background: var(--bg); border: 1px solid var(--line-strong); border-radius: 6px; max-width: 100%; }
+  select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  .aistate { font-size: 14px; color: var(--ink2); margin: 0 0 6px; overflow-wrap: anywhere; }
+  .guide ol { margin: 0 0 12px; padding-left: 1.4em; } .guide li { margin: 0 0 6px; }
+  .code { display: block; margin: 4px 0; padding: 8px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font-family: ui-monospace, Consolas, "Courier New", monospace; font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; }
+
   .mw-footer { box-sizing: border-box; width: 100%; max-width: 100%; margin: 24px 0 0; padding: 16px; background: #F7F7F8;
     border: 1px solid #D8D8DC; border-radius: 6px; color: #3A3A3E; font-family: system-ui, sans-serif; font-size: 12px; line-height: 1.7; }
   .mw-footer p { margin: 0 0 6px; } .mw-footer p:last-child { margin-bottom: 0; } .mw-footer a { color: #0B5AA6; display: inline-block; padding: 13px 0; }
@@ -78,7 +90,7 @@
   <h1>返信ひと言</h1>
   <p class="lead">気になる人の投稿を貼って、気持ちと距離感を選ぶと、返信の下書きを型の違う3案で出します。句読点（。、）は付けず、改行で区切ります。</p>
   <ul class="notes">
-    <li>貼った投稿と入力は、この端末のブラウザの中だけで処理します。送信せず、保存もしません（ページを閉じると消えます）</li>
+    <li>貼った投稿と入力は、標準ではこの端末のブラウザの中だけで処理します。送信せず、保存もしません（ページを閉じると消えます）。PCのOllamaを使う任意の機能を選んだときだけ、そのPC自身のOllamaに送ります（インターネットには送りません）。ページを開いたときにも、Ollamaがあるかを調べる通信（入力は含みません）をそのPC自身に1回送ります</li>
     <li>氏名・連絡先・住所などの個人情報が入った投稿は貼らないでください。@ユーザー名は外してから貼るのがおすすめです</li>
     <li>相手の投稿の意味を理解して返しているのではありません。言葉の拾い方は機械的で、ずれることがあります。送る前に必ず読み直して、自分の言葉に直してください</li>
   </ul>
@@ -124,6 +136,16 @@
       <section class="panel" aria-labelledby="out-h">
         <h2 id="out-h">返信の下書き（3案）</h2>
         <div id="status" role="status"></div>
+        <div class="aibox" id="ai-box" hidden>
+          <span class="lab" id="ai-lab">AIで作り直す（任意・このPCのOllama）</span>
+          <div class="aibar">
+            <select id="ai-model" aria-label="使うモデル"></select>
+            <button type="button" id="ai-go" class="primary">AIで作り直す</button>
+            <button type="button" id="ai-stop" hidden>中止</button>
+          </div>
+          <p class="aistate" id="ai-state" aria-live="off"></p>
+          <p class="hint">入力は、このPCの中のOllamaにだけ送られます。インターネットには送られません。AIの案は事実と違うことがあります。送る前に読み直してください</p>
+        </div>
         <div id="results"></div>
         <p class="hint">文字数は文字の数、ユニット数は全角などを2・半角などを1として数えた目安です。Xの実際の数え方と一致しないことがあります。280ユニットは目安で、超えると警告が出ます。条件を変えると案は作り直され、手で直した内容は消えます</p>
       </section>
@@ -140,10 +162,30 @@
     </ul>
   </details>
 
+  <details class="panel guide" id="ai-guide" hidden>
+    <summary>上級者向け: PCのOllamaで文面を作り直す</summary>
+    <p>パソコンにOllama（無料のAI実行ソフト）が入っていて、このページとの通信を許可すると、「AIで作り直す」が使えます。まだ使える状態ではありません（Ollamaが起動していないか、このページのアドレスが許可されていません）。スマホやSafariでは動かないことがあります。標準の下書きは、今のまま使えます。</p>
+    <p>許可するのは「このページのアドレスだけ」です。すべてを許可する設定（*）にはしないでください。他のサイトからOllamaを使われる状態になります。</p>
+    <p class="lab">Windows</p>
+    <ol>
+      <li>スタートメニューで「環境変数」と入力し、「環境変数を編集」を開く</li>
+      <li>上の「ユーザー環境変数」の「新規」を押し、変数名に <span class="code">OLLAMA_ORIGINS</span> 値に <span class="code">https://nncf123nncf-oss.github.io</span> を入れて OK を押す</li>
+      <li>タスクトレイのOllamaを右クリックして終了し、Ollamaを起動し直す</li>
+    </ol>
+    <p class="lab">Mac</p>
+    <ol>
+      <li>ターミナルで次を実行する <span class="code">launchctl setenv OLLAMA_ORIGINS "https://nncf123nncf-oss.github.io"</span></li>
+      <li>メニューバーのOllamaを終了し、起動し直す</li>
+    </ol>
+    <p class="hint">設定したあと、下のボタンで調べ直せます。ブラウザに「ローカルネットワークへのアクセス」の確認が出たら、このページだけ許可してください。</p>
+    <div class="btns"><button type="button" id="ai-recheck">もう一度調べる</button></div>
+    <p class="aistate" id="ai-recheck-state" aria-live="polite"></p>
+  </details>
+
   <footer class="mw-footer">
     <p>みちAIワークス（MICHI AI WORKS）／代表 田中　泉</p>
     <p>運営: <a href="https://michi-portfolio.vercel.app/" rel="noopener">みちAIワークス 公式サイト</a>（https://michi-portfolio.vercel.app/ ）／ お問い合わせ: <a href="mailto:nncf123nncf@gmail.com">nncf123nncf@gmail.com</a></p>
-    <p>貼った投稿と入力した内容はこのページの中（お使いの端末のブラウザ）だけで処理し、サーバーには送信せず、保存もしません。ページを閉じると消えます。アクセス解析（Cloudflare Web Analytics）で、ページの閲覧状況（閲覧数・参照元・ブラウザの種類など）を計測しています。入力した内容は送信しません。</p>
+    <p>貼った投稿と入力した内容は、標準ではこのページの中（お使いの端末のブラウザ）だけで処理し、サーバーには送信せず、保存もしません。ページを閉じると消えます。ページを開いたときに、お使いのPC自身のOllama（localhost）があるかを調べる通信（入力内容は含みません）を1回送ります。利用者が「AIで作り直す」を押したときだけ、入力内容をそのOllamaに送ります。インターネットには送りません。アクセス解析（Cloudflare Web Analytics）で、ページの閲覧状況（閲覧数・参照元・ブラウザの種類など）を計測しています。入力した内容は送信しません。</p>
     <p>このページは返信の下書きを出すだけで、Xなどへの投稿はしません。送る前の確認と判断はご自身で行ってください。</p>
     <p>ログイン・会員登録・パスワードの入力を求めることはありません。</p>
   </footer>
@@ -285,7 +327,139 @@ var RD = (function () {
     ];
   }
   var LIMIT = 280;
-  return { units: units, chars: chars, clean: clean, oneLine: oneLine, pickWords: pickWords, build: build, FEELINGS: FEELINGS, DISTS: DISTS, LIMIT: LIMIT };
+
+  /* ---- Ollama強化モード(任意)。モデルの出力は信用せず、必ず下の判定を通す ---- */
+  var AI_FEEL = ['相手の気持ちが分かると伝える', '教えてもらったことへの感謝を伝える', 'もっと知りたいという興味を伝える', '読んで感じたことを一言で伝える', '応援している気持ちを伝える', '自分も似た気持ちになったことがあると寄り添う(具体的な出来事は作らない)'];
+  var AI_STYLE = [
+    '初めて話す相手 丁寧な敬語を使う 語尾の例: ですね ました ありがとうございます',
+    '何度か話した相手 やわらかい敬語を使う 語尾の例: ですよね 嬉しいです ありがとうございます',
+    '仲がいい相手 友だちへのタメ口を使い 敬語は使わない 語尾の例: だよね すごいね ありがとう'
+  ];
+  var NG_WORDS = ['はじめまして', '初めまして', 'こんにちは', 'こんばんは', '拝見', '拝読', '読ませ', '読みました'];
+  var AI_MAX = 120, AI_MIN = 10;
+
+  // opts: { feeling, dist, post, word, num, memo } -> { system, user }
+  function buildPrompt(opts) {
+    var fi = opts.feeling, d = opts.dist, f = FEELINGS[fi], feel = AI_FEEL[fi];
+    var memo = oneLine(opts.memo || ''), word = oneLine(opts.word || '');
+    var system = [
+      'あなたはSNSで返信の下書きを書く日本語のアシスタントです 相手の投稿への返信を3案作ります',
+      '決まり',
+      '- 相手の投稿の具体的な言葉に1つ触れる',
+      '- 投稿に書かれていない事実 数字 自分の経験を作らない',
+      '- 挨拶(はじめまして こんにちは)と 拝見 拝読 読みました 読ませて は使わない',
+      '- 句読点(。、) 感嘆符 疑問符 絵文字は使わない 文の切れ目は改行で表す',
+      '- 1案は1〜3行 40〜90文字',
+      '- 相手との距離感: ' + AI_STYLE[d],
+      '- 気持ち「' + f.name + '」(' + feel + ')を3案すべてに必ず込める 1案でも欠けたら失敗',
+      '案ごとの指示',
+      '- 1案目: 気持ちを中心に 投稿の具体的な言葉に触れる 2〜3行',
+      '- 2案目: 気持ちを一言入れたうえで 投稿について質問を1つする 1〜2行',
+      '- 3案目: 気持ちを伝える ' + (memo ? '自分の一言「' + memo + '」の内容を自分の言葉として入れる' : '自分の体験は書かず 気持ちと締めの一言だけにする') + ' 1〜2行',
+      '例の言い回しをそのまま写さず 今回の投稿に合わせて書く',
+      '出力はJSONだけ {"plans":["1案目","2案目","3案目"]} 3案は必ず3つの文字列にする 1案の中で改行したいときは 文字列の中にだけ \\n と書く',
+      '例(別の投稿「朝5時に起きて英語の日記を始めた」・お礼・初めて話す)',
+      '{"plans":["朝早くから続けているお話 とても励みになりました\\n教えてくださってありがとうございます","英語の日記は 最初に何から書き始めましたか","参考にさせていただきます\\nありがとうございます"]}'
+    ].join('\n');
+    var user = ['相手の投稿', '<<<', String(opts.post == null ? '' : opts.post).slice(0, 2000), '>>>', '気持ち: ' + f.name, '距離感: ' + DISTS[d].name];
+    if (word) user.push('触れてほしい言葉: ' + word);
+    if (memo) user.push('自分の一言: ' + memo);
+    return { system: system, user: user.join('\n') };
+  }
+
+  // モデルの返事から3案を取り出す。取り出せなければ null
+  function parsePlans(text) {
+    var s = String(text == null ? '' : text), obj = null, a, b;
+    a = s.indexOf('{'); b = s.lastIndexOf('}');
+    if (a >= 0 && b > a) { try { obj = JSON.parse(s.slice(a, b + 1)); } catch (e) { obj = null; } }
+    if (obj == null) { a = s.indexOf('['); b = s.lastIndexOf(']'); if (a >= 0 && b > a) { try { obj = JSON.parse(s.slice(a, b + 1)); } catch (e) { obj = null; } } }
+    var arr = null;
+    if (Array.isArray(obj)) arr = obj;
+    else if (obj && Array.isArray(obj.plans)) arr = obj.plans;
+    else if (obj && typeof obj === 'object') arr = Object.keys(obj).map(function (k) { return obj[k]; });
+    // JSONが壊れている(文字列の外に改行の記号が出るなど)・3案に満たないときは、引用符で囲まれた文字列を順に拾う
+    if (!arr || arr.length < 3) {
+      var strs = [], re = /"((?:[^"\\]|\\.)*)"/g, mm;
+      while ((mm = re.exec(s))) {
+        var v = mm[1];
+        if (v === 'plans') continue;
+        try { v = JSON.parse('"' + v + '"'); } catch (e) { v = v.replace(/\\n/g, '\n'); }
+        if (strs.length < 3) strs.push(v);
+      }
+      if (strs.length > (arr ? arr.length : 0)) arr = strs;
+    }
+    if (!arr || !arr.length) return null;
+    return arr.slice(0, 3).map(function (x) { return typeof x === 'string' ? x : (x && typeof x.text === 'string' ? x.text : ''); });
+  }
+
+  // 句読点・感嘆符・疑問符・絵文字・箇条書き記号を取り除く(既存の clean を再利用)
+  function sanitizeAI(raw) {
+    var s = String(raw == null ? '' : raw).replace(/\r\n?/g, '\n');
+    s = s.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, ' ');
+    s = s.replace(/[！!？?]/g, '\n').replace(/[*`"“”＂]/g, ' ');
+    s = s.split('\n').map(function (l) { return l.replace(/^\s*(案\s*[1-3１-３]\s*[:：.．]?|[-・●○■]|[1-3１-３][.．)）:：](?![0-9０-９]))\s*/, ''); }).join('\n');
+    return clean(s);
+  }
+  function normFact(s) { return String(s).normalize('NFKC').replace(/(\d)[,，](?=\d)/g, '$1'); }
+  function numTokens(s) { return normFact(s).match(/\d+(?:\.\d+)?/g) || []; }
+  function squash(s) { return normFact(s).replace(/[\s。、，．,.!！?？]/g, ''); }
+  var POLITE_END = /(です|ます|ました|でした|ません|ください|ございます|でしょう|いただけます)(ね|よ|か|かな)?$/;
+  var CASUAL_END = /(だよ|だね|だな|かな|よね|じゃん|だった|てる|てた|ちゃった|ちゃう|ない|たい|だぞ|よ|ね|ぞ|わ|な)$/;
+
+  // 1案の判定。raw: モデルの出力 / ctx: { dist, source } source は貼った投稿+メモ+言葉入力
+  function judge(raw, ctx) {
+    var t = sanitizeAI(raw), reasons = [];
+    if (!t) return { ok: false, text: '', reasons: ['空'] };
+    var n = chars(t);
+    if (n > AI_MAX) reasons.push('長すぎる(' + n + '字)');
+    else if (n < AI_MIN) reasons.push('短すぎる(' + n + '字)');
+    var nl = t.split('\n').length;
+    if (nl > 3) reasons.push('行が多い(' + nl + '行)');
+    if (/https?:|[@＠]/.test(t)) reasons.push('URLまたは@を含む');
+    NG_WORDS.forEach(function (w) { if (t.indexOf(w) >= 0) reasons.push('NG語「' + w + '」'); });
+    // 事実ガード: 数字と「」の中の語は、貼った文・メモ・言葉入力のどれかにあるものだけ
+    var src = ctx.source || '', have = numTokens(src), bad = [];
+    numTokens(t).forEach(function (x) { if (have.indexOf(x) < 0 && bad.indexOf(x) < 0) bad.push(x); });
+    if (bad.length) reasons.push('元にない数字(' + bad.join(' ') + ')');
+    var kj = t.match(/[一二三四五六七八九十百千万]+(?:日間|日|年間|年|分|回|人|時間|週間|か月|ヶ月|キロ|個|杯|冊|枚|歳)/g) || [], sqs = squash(src), kbad = kj.filter(function (x) { return sqs.indexOf(x) < 0; });
+    if (kbad.length) reasons.push('元にない漢数字(' + kbad.join(' ') + ')');
+    var q = /[「『]([^「『」』]+)[」』]/g, m, sq = squash(src);
+    while ((m = q.exec(t))) { var inner = squash(m[1]); if (inner && sq.indexOf(inner) < 0) { reasons.push('元にない「」の語(' + m[1] + ')'); break; } }
+    // 距離感の簡易判定(文末だけを見る)
+    var lines = t.split('\n'), pol = 0, cas = 0;
+    lines.forEach(function (l) {
+      var e = l.replace(/[\s」』)）]+$/, '');
+      if (POLITE_END.test(e)) pol++; else if (CASUAL_END.test(e)) cas++;
+    });
+    if (ctx.dist === 2 && pol > 0) reasons.push('距離感(仲がいいのに敬語)');
+    if (ctx.dist === 0 && cas * 2 > lines.length) reasons.push('距離感(初めて話すのにタメ口)');
+    return { ok: reasons.length === 0, text: t, reasons: reasons };
+  }
+  // 3案をまとめて判定。同じ文の案は2つ目以降を不合格にする。足りない案は不合格
+  function evaluate(rawList, ctx) {
+    var out = [], seen = [];
+    for (var i = 0; i < 3; i++) {
+      var r = rawList && rawList[i] != null ? judge(rawList[i], ctx) : { ok: false, text: '', reasons: ['なし'] };
+      if (r.ok && seen.indexOf(r.text) >= 0) { r.ok = false; r.reasons.push('他の案と同じ'); }
+      if (r.ok) seen.push(r.text);
+      out.push(r);
+    }
+    return out;
+  }
+  function failCount(ev) { return ev.filter(function (e) { return !e.ok; }).length; }
+  // 1回目と再生成の結果から、案ごとに合格したものを選ぶ。どちらも不合格なら null(=ルールベースに差し替え)
+  function pickBest(evs) {
+    var res = [null, null, null], seen = [];
+    for (var i = 0; i < 3; i++) {
+      for (var a = 0; a < evs.length; a++) {
+        var e = evs[a] && evs[a][i];
+        if (e && e.ok && seen.indexOf(e.text) < 0) { res[i] = e.text; seen.push(e.text); break; }
+      }
+    }
+    return res;
+  }
+  return { units: units, chars: chars, clean: clean, oneLine: oneLine, pickWords: pickWords, build: build, FEELINGS: FEELINGS, DISTS: DISTS, LIMIT: LIMIT,
+    buildPrompt: buildPrompt, parsePlans: parsePlans, sanitizeAI: sanitizeAI, judge: judge, evaluate: evaluate, failCount: failCount, pickBest: pickBest, AI_MAX: AI_MAX, AI_MIN: AI_MIN };
 })();
 </script>
 
@@ -357,17 +531,25 @@ var RD = (function () {
     else fallback();
   }
   function fit(ta) { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 2) + 'px'; }
-  function renderResults() {
+  // ai: 案ごとのAIの案の文章(null=ルールベースの案のまま)。省略時はルールベースだけ
+  function renderResults(ai) {
+    var aborted = false;
+    if (!ai) { if (gen) { abortGen('条件が変わったため、AIの作成を中止しました'); aborted = true; } else aiSet(''); }
     var plans = RD.build({ feeling: st.feeling, dist: st.dist, word: activeWord(), num: st.numOff ? '' : picks.num, memo: memoEl.value });
-    resEl.textContent = ''; say('');
+    resEl.textContent = ''; if (!ai && !aborted) say('');
     plans.forEach(function (p, i) {
+      var isAI = !!(ai && ai[i]);
+      var text = isAI ? ai[i] : p.text;
       var card = document.createElement('div'); card.className = 'card';
       var h = document.createElement('h3'); var no = document.createElement('span'); no.className = 'no'; no.textContent = '案' + (i + 1);
-      h.appendChild(no); h.appendChild(document.createTextNode(p.type)); card.appendChild(h);
-      var ta = document.createElement('textarea'); ta.id = 'plan' + (i + 1); ta.value = p.text; ta.rows = Math.max(3, p.text.split('\n').length + 1); ta.setAttribute('aria-label', '案' + (i + 1) + '（' + p.type + '）の返信'); card.appendChild(ta);
+      h.appendChild(no); h.appendChild(document.createTextNode(p.type));
+      if (isAI) { var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = 'AIの案'; h.appendChild(bd); }
+      card.appendChild(h);
+      var ta = document.createElement('textarea'); ta.id = 'plan' + (i + 1); ta.value = text; ta.rows = Math.max(3, text.split('\n').length + 1); ta.setAttribute('aria-label', '案' + (i + 1) + '（' + p.type + (isAI ? '・AIの案' : '') + '）の返信'); card.appendChild(ta);
       var stats = document.createElement('p'); stats.className = 'stats'; card.appendChild(stats);
       var warn = document.createElement('p'); warn.className = 'warn'; warn.hidden = true; card.appendChild(warn);
-      if (p.needsMemo) { var hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '一言メモを書くと、この案に自分の一行が入ります。今のままでは何の話か伝わりにくい案です'; card.appendChild(hint); }
+      if (isAI) { var ah = document.createElement('p'); ah.className = 'hint ai-note'; ah.textContent = 'このPCのOllamaが作った案です。事実と違う点がないか、送る前に読んでください'; card.appendChild(ah); }
+      else if (p.needsMemo) { var hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '一言メモを書くと、この案に自分の一行が入ります。今のままでは何の話か伝わりにくい案です'; card.appendChild(hint); }
       var btn = document.createElement('button'); btn.type = 'button'; btn.className = 'primary'; btn.textContent = '案' + (i + 1) + 'をコピー'; card.appendChild(btn);
       countsText(ta, stats, warn);
       ta.addEventListener('input', function () { countsText(ta, stats, warn); fit(ta); });
@@ -376,13 +558,125 @@ var RD = (function () {
       fit(ta);
     });
   }
+
+  /* ---- Ollama強化モード(任意)。通信先は localhost:11434 だけ ---- */
+  var OLLAMA = 'http://localhost:11434';
+  var AI_TIMEOUT_MS = 60000, DETECT_TIMEOUT_MS = 2000, PREFERRED = 'qwen2.5:7b';
+  var gen = null; // 作成中の状態 { ctrl, timer, tick, timedOut, userStop }
+  var aiBox = $('ai-box'), aiGo = $('ai-go'), aiStop = $('ai-stop'), aiModel = $('ai-model'), aiState = $('ai-state'), aiGuide = $('ai-guide');
+  var aiReady = false, NEED_POST = '相手の投稿を貼ると使えます';
+
+  function aiSet(t) { aiState.textContent = t; }
+  function syncAiBtn() {
+    var empty = !postEl.value.trim();
+    aiGo.disabled = !aiReady || !!gen || empty;
+    if (aiReady && !gen && empty) aiSet(NEED_POST); else if (aiState.textContent === NEED_POST) aiSet('');
+  }
+  function withTimeout(ms) {
+    var t = { ctrl: new AbortController(), timedOut: false };
+    t.timer = setTimeout(function () { t.timedOut = true; t.ctrl.abort(); }, ms);
+    return t;
+  }
+  function detect() {
+    var t = withTimeout(DETECT_TIMEOUT_MS);
+    return fetch(OLLAMA + '/api/tags', { signal: t.ctrl.signal, cache: 'no-store', credentials: 'omit' }).then(function (r) {
+      if (!r.ok) throw new Error('status ' + r.status);
+      return r.json();
+    }).then(function (j) {
+      clearTimeout(t.timer);
+      var names = (j.models || []).filter(function (m) { return m && m.name && !m.remote_host && !m.remote_model && !/cloud/i.test(m.name) && !/embed/i.test(m.name); }).map(function (m) { return m.name; });
+      if (!names.length) throw new Error('no model');
+      return names;
+    }, function (e) { clearTimeout(t.timer); throw e; });
+  }
+  function showReady(names) {
+    aiModel.textContent = '';
+    names.forEach(function (n) { var o = document.createElement('option'); o.value = n; o.textContent = n; aiModel.appendChild(o); });
+    aiModel.value = names.indexOf(PREFERRED) >= 0 ? PREFERRED : names[0];
+    aiReady = true; aiBox.hidden = false; aiGuide.hidden = true; syncAiBtn();
+  }
+  function showGuide() { aiReady = false; aiBox.hidden = true; aiGuide.hidden = false; }
+  function runDetect(stateEl) {
+    if (stateEl) stateEl.textContent = '調べています';
+    return detect().then(function (names) { showReady(names); if (stateEl) stateEl.textContent = 'Ollamaが見つかりました。上の「AIで作り直す」が使えます'; return true; },
+      function () { showGuide(); if (stateEl) stateEl.textContent = 'まだ使えません。設定と、Ollamaの再起動を確認してください'; return false; });
+  }
+
+  function endGen() { if (!gen) return; clearInterval(gen.tick); clearTimeout(gen.timer); gen = null; aiStop.hidden = true; aiGo.hidden = false; }
+  function abortGen(msg) {
+    if (!gen) return;
+    var g = gen; g.userStop = true; g.ctrl.abort(); endGen();
+    syncAiBtn(); aiSet(msg); say(msg);
+  }
+  function chat(model, prompt, g) {
+    clearTimeout(g.timer); g.timedOut = false;
+    g.timer = setTimeout(function () { g.timedOut = true; g.ctrl.abort(); }, AI_TIMEOUT_MS);
+    var body = { model: model, stream: false, messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }], options: { temperature: 0.6, num_predict: 500 } };
+    return fetch(OLLAMA + '/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: g.ctrl.signal, credentials: 'omit' }).then(function (r) {
+      if (!r.ok) { var er = new Error('status ' + r.status); er.status = r.status; throw er; }
+      return r.json();
+    }).then(function (j) { clearTimeout(g.timer); return (j && j.message && j.message.content) || ''; });
+  }
+  function errText(e, g) {
+    if (g.timedOut) return (AI_TIMEOUT_MS / 1000) + '秒で終わらなかったため打ち切りました。初回はモデルの読み込みで長くかかることがあります。もう一度押してみてください。ルールベースの案のままです';
+    if (e && e.status === 404) return 'このモデルが見つかりません。Ollamaに入っているモデルを選び直してください';
+    if (e && e.status) return 'Ollamaがエラーを返しました（' + e.status + '）。ルールベースの案のままです';
+    return 'Ollamaに接続できませんでした。起動しているか確認してください。ルールベースの案のままです';
+  }
+  function runAI() {
+    if (gen || !aiReady || !postEl.value.trim()) return;
+    var opts = { feeling: st.feeling, dist: st.dist, post: postEl.value, word: activeWord(), num: st.numOff ? '' : picks.num, memo: memoEl.value };
+    var ctx = { dist: st.dist, source: [postEl.value, memoEl.value, activeWord()].join('\n') };
+    var prompt = RD.buildPrompt(opts), model = aiModel.value;
+    var g = gen = { ctrl: new AbortController(), timer: 0, tick: 0, timedOut: false, userStop: false };
+    var t0 = Date.now(), phase = '作成中';
+    function tick() { aiSet(phase + '（' + model + '）' + Math.floor((Date.now() - t0) / 1000) + '秒 ／ 1回あたり最長' + (AI_TIMEOUT_MS / 1000) + '秒'); }
+    g.tick = setInterval(tick, 1000); tick();
+    aiGo.hidden = true; aiStop.hidden = false; aiGo.disabled = true; say('');
+    var evs = [];
+    function finish() {
+      if (gen !== g) return;
+      endGen();
+      var best = RD.pickBest(evs), n = best.filter(Boolean).length, secs = Math.round((Date.now() - t0) / 1000);
+      renderResults(best);
+      var notes = [];
+      for (var i = 0; i < 3; i++) {
+        if (best[i]) continue;
+        var rs = '不合格';
+        evs.forEach(function (ev) { if (ev && ev[i] && ev[i].reasons.length) rs = ev[i].reasons.join('・'); });
+        notes.push('案' + (i + 1) + '＝' + rs);
+      }
+      var msg = 'AIの案 ' + n + '件 ／ ルールベースの案 ' + (3 - n) + '件（' + secs + '秒）';
+      if (g.retryFailed) msg += '。再作成は失敗したため1回目の結果を使いました';
+      if (notes.length) msg += '。差し替えた理由: ' + notes.join(' ／ ');
+      aiSet(msg); say(msg); syncAiBtn();
+    }
+    function fail(e) {
+      if (gen !== g || g.userStop) return; // 条件変更や中止で既に片付いている
+      if (evs.length) { g.retryFailed = true; finish(); return; } // 再生成だけ失敗したときは、1回目の結果を使う
+      var m = errText(e, g); endGen(); aiSet(m); say(m); syncAiBtn();
+    }
+    function attempt(label) {
+      phase = label; tick();
+      return chat(model, prompt, g).then(function (txt) { return RD.evaluate(RD.parsePlans(txt), ctx); });
+    }
+    attempt('作成中').then(function (ev1) {
+      evs.push(ev1);
+      if (gen !== g) return;
+      if (RD.failCount(ev1) >= 2) return attempt('条件に合わない案が多いため、もう一度作成中').then(function (ev2) { evs.push(ev2); });
+    }).then(finish, fail);
+  }
+  aiGo.addEventListener('click', runAI);
+  aiStop.addEventListener('click', function () { abortGen('中止しました。ルールベースの案のままです'); });
+  $('ai-recheck').addEventListener('click', function () { runDetect($('ai-recheck-state')); });
+
   function onPost() {
     var prevWord = st.sel >= 0 && picks.cands[st.sel] ? picks.cands[st.sel].w : null, wasNone = st.sel === -1 && picks.cands.length > 0;
     picks = RD.pickWords(postEl.value);
     var keep = -1;
     if (prevWord !== null) picks.cands.forEach(function (c, i) { if (c.w === prevWord) keep = i; });
     st.sel = picks.cands.length ? (keep >= 0 ? keep : (wasNone ? -1 : 0)) : -1;
-    buildCands(); renderResults();
+    buildCands(); renderResults(); syncAiBtn();
   }
   postEl.addEventListener('input', onPost);
   manualEl.addEventListener('input', function () { buildCands(); renderResults(); });
@@ -393,9 +687,10 @@ var RD = (function () {
   function init() {
     mkGroup($('feelings'), RD.FEELINGS, 'feeling', renderResults);
     mkGroup($('dists'), RD.DISTS, 'dist', renderResults);
-    onPost();
+    onPost(); syncAiBtn();
   }
   init();
+  runDetect(null);
 })();
 </script>
 
