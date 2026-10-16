@@ -244,8 +244,15 @@ for (let f = 0; f < 6; f++) for (let d = 0; d < 3; d++) { const p = RD.buildProm
 // ===== 言い回しのバリエーション(2026-10-16) =====
 const NG = ['はじめまして', '初めまして', 'こんにちは', 'こんばんは', '拝見', '拝読', '読ませ', '読みました', '共感しました', '[。、，．！？!?]'];
 const NG_RE = new RegExp(NG.join('|'));
-const POLITE_END = /(です|ます|ました|でした|ません|ください|ございます|でしょう|ましょう)(か|ね|よ|よね|かな)?$/;
+const POLITE_END = /(です|ます|ました|でした|ません|ください|ございます|でしょう|ましょう|ますように)(か|ね|よ|よね|かな)?$/;
 const POLITE_ANY = /(です|ます|ました|でした|ません|ください|ございます|でしょう|ましょう)/;
+// 不自然・事実を作る言い回しの禁止パターン
+const OSHITSUKE = /(ました|ます|です)よ$/;                      // 語尾「〜ましたよ」の押しつけ
+const STATE_CLAIM = /心をつかまれ|楽しい気持ちに|嬉しくなっ|読み返したくなっ|心が軽く|気持ちが軽く|すっきり|やわらかくな|元気をもらい|元気が出|元気もらった|元気出た|勇気|反芻|引き込まれ|じんわり残る|温度が伝わ/; // 返信する人の状態を、根拠なく作る
+const SELF_CLAIM = /同じ気持ちになり|覚えが|もそうでし|もそうだった|経験したことが|自分にもあり|自分にもあった|思い出し|重ね/; // 共感・経験を選んだときだけ許す
+const THANKS_TEACH = /助かり|助かった|助かる|参考に|勉強に|学びに|役立|役に立|収穫|真似/;   // 教え・コツの投稿にだけ使ってよいお礼
+const POS_ON_NEG = /好き|楽しい|楽しく|素敵|いい投稿|元気|引き込|嬉しい|よかった|参考になりました|勉強になりました/; // 重い気持ちをなぞる文に使ってはいけない
+const HARD_VERB = /\{v\}(ところ|こと[をがはに])/;               // 動詞を「ところ・こと」で受ける硬い言い方(ほめる側の表)
 const CASUAL_ANY = /ちゃ|じゃ|めっちゃ|ほんと|だよ|だね|ってる|ってた/;
 // S11 表そのものの検査
 const SLOT_KEYS = ['EMP', 'EMP2', 'REACT', 'CLOSE', 'EMO', 'VERB'];
@@ -257,6 +264,8 @@ function checkTable(tag, rows, ph) {
     ok(tag + j + ' distinct across distances', new Set(tr).size === 3, tr);
     tr.forEach((s, d) => {
       ok(tag + j + 'd' + d + ' no NG/punct', !NG_RE.test(s), s);
+      ok(tag + j + 'd' + d + ' no 〜ましたよ', !OSHITSUKE.test(s), s);
+      ok(tag + j + 'd' + d + ' no state claim', !STATE_CLAIM.test(s), s);
       ok(tag + j + 'd' + d + ' placeholder', ph ? s.includes(ph) : !/\{|\}/.test(s), s);
       if (d < 2) ok(tag + j + 'd' + d + ' polite ending', POLITE_END.test(s), s);
       if (d === 0) ok(tag + j + 'd0 no casual', !CASUAL_ANY.test(s), s);
@@ -265,9 +274,24 @@ function checkTable(tag, rows, ph) {
     });
   });
 }
-RD.FEELINGS.forEach((f, i) => SLOT_KEYS.forEach(k => checkTable('S11 f' + i + k, f[k], k === 'REACT' ? '{w}' : k === 'EMO' ? '{e}' : k === 'VERB' ? '{v}' : '')));
+const PH = (k) => k === 'REACT' ? '{w}' : k === 'EMO' ? '{e}' : k === 'VERB' ? '{v}' : '';
+RD.FEELINGS.forEach((f, i) => SLOT_KEYS.forEach(k => {
+  checkTable('S11 f' + i + k, f[k], PH(k));
+  if (f.alt) checkTable('S11 f' + i + 'alt' + k, f.alt[k], PH(k));
+  [f[k]].concat(f.alt ? [f.alt[k]] : []).forEach((rows, a) => rows.forEach((tr, j) => tr.forEach((s, d) => {
+    if (i >= 1 && i <= 4) ok('S11 f' + i + (a ? 'alt' : '') + k + j + 'd' + d + ' no self claim', !SELF_CLAIM.test(s), s);
+    if (k === 'VERB') ok('S11 f' + i + (a ? 'alt' : '') + 'VERB' + j + 'd' + d + ' no hard こと/ところ', !HARD_VERB.test(s), s);
+    if (i === 1 && a === 1) ok('S11 f1alt ' + k + j + 'd' + d + ' no teach-only thanks', !THANKS_TEACH.test(s), s);
+  })));
+}));
+['Q', 'QW', 'QA', 'QAW', 'QAN', 'QAWN', 'QA_TAIL', 'NUMLINE', 'VERB_OTHER', 'EMO_NEG', 'EMO_MIX', 'HEAVY1', 'HEAVY2', 'HEAVY3', 'JOY'].forEach(n => RD[n].forEach((tr, j) => tr.forEach((s, d) => {
+  ok('S11 ' + n + j + 'd' + d + ' no 〜ましたよ', !OSHITSUKE.test(s), s); ok('S11 ' + n + j + 'd' + d + ' no state claim', !STATE_CLAIM.test(s), s);
+  if (n !== 'QA' && n !== 'QAW') ok('S11 ' + n + j + 'd' + d + ' no self claim', !SELF_CLAIM.test(s) && !/同じ疑問|同じこと気になっ|実は私も|実は自分も/.test(s), s);
+  if (/^HEAVY/.test(n)) ok('S11 ' + n + j + 'd' + d + ' not bright', !RD.POS_RE.test(s.replace('ありがとう', '')) && !/ぼちぼち|想像/.test(s), s);
+  if (n === 'EMO_NEG') ok('S11 EMO_NEG' + j + 'd' + d + ' no positive echo', !POS_ON_NEG.test(s.replace('ありがとう', '')), s);
+})));
 checkTable('S11 Q', RD.Q, ''); checkTable('S11 QW', RD.QW, '{w}'); checkTable('S11 QA', RD.QA, ''); checkTable('S11 QAW', RD.QAW, '{w}');
-checkTable('S11 QA_TAIL', RD.QA_TAIL, ''); checkTable('S11 EMO_NEG', RD.EMO_NEG, '{e}'); checkTable('S11 NUMLINE', RD.NUMLINE, '{n}'); checkTable('S11 VERB_OTHER', RD.VERB_OTHER, '{v}');
+checkTable('S11 QA_TAIL', RD.QA_TAIL, ''); checkTable('S11 EMO_NEG', RD.EMO_NEG, '{e}'); checkTable('S11 EMO_MIX', RD.EMO_MIX, '{e}'); checkTable('S11 QAN', RD.QAN, ''); checkTable('S11 QAWN', RD.QAWN, '{w}'); ['HEAVY1', 'HEAVY2', 'HEAVY3', 'JOY'].forEach(n => checkTable('S11 ' + n, RD[n], '')); checkTable('S11 NUMLINE', RD.NUMLINE, '{n}'); checkTable('S11 VERB_OTHER', RD.VERB_OTHER, '{v}');
 eq('S11 SEEDS', RD.SEEDS, 12);
 
 // S12 全組み合わせ(気持ち6×距離感3×巡回12×言葉×メモ×数量×気持ちの言葉×出来事×質問)
@@ -276,12 +300,12 @@ const first4 = (t) => Array.from(t.split('\n')[0]).slice(0, 4).join('');
 const VERB_SETS = [['', ''], ['続けている', 'pos'], ['落ちた', 'other']];
 let n12 = 0; const fails = []; const note = (tag, info) => { if (fails.length < 12) fails.push(tag + ' ' + JSON.stringify(info)); else fails.length === 12 && fails.push('...'); };
 const stat = { consecSame: 0, consecTotal: 0, consecSameNoMemoP3: 0, bumpSame: 0, bumpTotal: 0, openerFallback: 0 };
-for (let f = 0; f < 6; f++) for (let d = 0; d < 3; d++) for (const w of ['', '完走']) for (const memo of ['', MEMO]) for (const n of ['', '3km']) for (const [emo, et] of [['', ''], ['泣きそうになる', 'pos'], ['悔しい', 'neg']]) for (const [verb, vt] of VERB_SETS) for (const q of [false, true]) {
+for (let f = 0; f < 6; f++) for (let d = 0; d < 3; d++) for (const w of ['', '完走']) for (const memo of ['', MEMO]) for (const n of ['', '3km']) for (const [emo, et] of [['', ''], ['泣きそうになる', 'pos'], ['悔しい', 'neg']]) for (const [verb, vt] of VERB_SETS) for (const q of [false, true]) for (const teach of (f === 1 ? [false, true] : [false])) for (const short of (!w && !memo && !n && !emo && !verb ? [false, true] : [false])) {
   const prev = [];
   for (let seed = 0; seed < 12; seed++) {
     n12++;
-    const o = { feeling: f, dist: d, word: w, num: n, memo, emo, emoTone: et, verb, verbTone: vt, question: q, seed };
-    const tag = `f${f}d${d}s${seed} w${w ? 1 : 0}m${memo ? 1 : 0}n${n ? 1 : 0}e${et || 0}v${vt || 0}q${q ? 1 : 0}`;
+    const o = { feeling: f, dist: d, word: w, num: n, memo, emo, emoTone: et, verb, verbTone: vt, question: q, teach, short, seed };
+    const tag = `f${f}d${d}s${seed} w${w ? 1 : 0}m${memo ? 1 : 0}n${n ? 1 : 0}e${et || 0}v${vt || 0}q${q ? 1 : 0}t${teach ? 1 : 0}sh${short ? 1 : 0}`;
     const pl = RD.build(o), tx = pl.map(p => p.text);
     if (pl.length !== 3 || tx.some(x => !x)) { note(tag + ' empty', tx); continue; }
     if (new Set(tx).size !== 3) note(tag + ' same', tx);
@@ -299,16 +323,26 @@ for (let f = 0; f < 6; f++) for (let d = 0; d < 3; d++) for (const w of ['', '�
     if (!emo && /泣きそうになる/.test(tx.join('\n'))) note(tag + ' emo unexpected', tx);
     if (!verb && /続けている|落ちた/.test(tx.join('\n'))) note(tag + ' verb unexpected', tx);
     if (memo ? !(tx[2].includes(MEMO) && !pl[2].needsMemo) : !pl[2].needsMemo) note(tag + ' memo', tx[2]);
-    if (q && !(pl[1].type === '質問に答える')) note(tag + ' qtype', pl[1].type);
+    if (q && !(pl[1].type === '質問に反応する')) note(tag + ' qtype', pl[1].type);
     // 文体: メモの行は利用者の文なので除く
     const lines = tx.join('\n').split('\n').filter(l => l !== MEMO);
     if (d === 2 && lines.some(l => POLITE_ANY.test(l))) note(tag + ' close w/ polite', lines.filter(l => POLITE_ANY.test(l)));
     if (d < 2 && lines.some(l => !POLITE_END.test(l))) note(tag + ' polite lines', lines.filter(l => !POLITE_END.test(l)));
     if (d === 0 && lines.some(l => CASUAL_ANY.test(l))) note(tag + ' first w/ casual', lines.filter(l => CASUAL_ANY.test(l)));
+    // 返信する人の状態を作らない / 共感・経験以外で自分の経験を言わない / 押しつけ語尾
+    const bodyLines = tx.join('\n').split('\n').filter(l => l !== MEMO);
+    if (bodyLines.some(l => STATE_CLAIM.test(l))) note(tag + ' state claim', bodyLines.filter(l => STATE_CLAIM.test(l)));
+    if (bodyLines.some(l => OSHITSUKE.test(l))) note(tag + ' ましたよ', bodyLines.filter(l => OSHITSUKE.test(l)));
+    if (f >= 1 && f <= 4 && bodyLines.some(l => SELF_CLAIM.test(l) || /同じ疑問|同じこと気になっ|実は私も|実は自分も/.test(l))) note(tag + ' self claim', bodyLines.filter(l => SELF_CLAIM.test(l)));
+    if (f === 1 && !teach && bodyLines.some(l => THANKS_TEACH.test(l))) note(tag + ' teach-thanks on non-teach', bodyLines.filter(l => THANKS_TEACH.test(l)));
+    if (f === 1 && teach && !(bodyLines.length)) note(tag + ' teach empty', tx);
+    if (et === 'neg') { const el = bodyLines.filter(l => l.includes(emo)); if (!el.length || el.some(l => POS_ON_NEG.test(l.replace('ありがとう', '')))) note(tag + ' positive echo of heavy emotion', el); }
+    if ((et === 'neg' || vt === 'other') && bodyLines.some(l => RD.POS_RE.test(l.replace('ありがとう', '')))) note(tag + ' bright phrase in gentle mode', bodyLines.filter(l => RD.POS_RE.test(l.replace('ありがとう', ''))));
+    if (short && !memo && (tx[0].split('\n').length > 1 || tx[2].split('\n').length > 1)) note(tag + ' short post not one line', tx);
     // 連続するシードの変化
     if (prev.length) {
       for (let p = 0; p < 3; p++) { stat.consecTotal++; if (prev[p] === tx[p]) { stat.consecSame++; if (!(p === 2 && memo)) stat.consecSameNoMemoP3++; } }
-      if (prev.join('\n') === tx.join('\n')) note(tag + ' consecutive seeds identical', tx);
+      if (prev.join('\n') === tx.join('\n')) { if (et === 'neg' || vt === 'other') stat.gentleIdentical = (stat.gentleIdentical || 0) + 1; else note(tag + ' consecutive seeds identical', tx); }
     }
     prev.length = 0; tx.forEach(x => prev.push(x));
     // 案ごとの切り替え(bump)
@@ -358,7 +392,10 @@ eq('S13 verb quit2', VW('部活を辞めました'), ['やめた:other']);
 eq('S13 verb passed', VW('試験に受かった'), ['受かった:pos']);
 eq('S13 verb study', VW('毎日勉強している'), ['勉強している:pos']);
 eq('S13 verb practice past', VW('練習した'), ['練習した:pos']);
-eq('S13 verb order', VW('走りきったあと休んだ'), ['走りきった:pos', '休んだ:other']);
+eq('S13 verb order', VW('走りきったあと転んだ'), ['走りきった:pos', '転んだ:other']);
+eq('S13 ambiguous verbs not picked', VW('今日も無事に終わった 休んだ 買った 決めた 引っ越した 通っている'), []);
+eq('S13 mistake verbs', VW('金額を間違えた 連絡を忘れた'), ['間違えた:other', '忘れた:other']);
+eq('S13 emo fall/shock', [EW('かなり落ち込んでいる'), EW('ショックだった'), EW('凹んだ')].map(a => a[0] + ':' + SG('落ち込んだ').emos[0].tone), ['落ち込む:neg', 'ショックを受ける:neg', '凹む:neg']);
 eq('S13 verb negated skipped', VW('続けていない 始めなかった 落ちなかった'), []);
 eq('S13 verb not match 初めて', VW('初めて行った'), []);
 eq('S13 verb start', VW('ブログを始めた'), ['始めた:pos']);
@@ -373,6 +410,29 @@ eq('S13 emo te-iru kept', [EW('迷っている'), EW('疲れている'), EW('焦
 eq('S13 verb kept', [VW('走ったよ'), VW('3年続けてきた'), VW('受かった。嬉しい')].map(a => a[0]), ['走った:pos', '続けている:pos', '受かった:pos']);
 eq('S13 question not ですから', [SG('忙しいですからね').question, SG('頑張りますから').question, SG('やってみませんか').question, SG('これで合ってますか').question], [false, false, false, true]);
 eq('S13 emo tone', [SG('悔しい').emos[0].tone, SG('嬉しい').emos[0].tone, SG('不安だった').emos[0].tone], ['neg', 'pos', 'neg']);
+eq('S13 teach', [SG('朝活のコツは早起きです').teach, SG('手順は3つです').teach, SG('おすすめは緑茶です').teach, SG('続けるコツを教えてください').teach, SG('今日は議事録をまとめた').teach, SG('ポイントカードを作った').teach, SG('解決方法が見つからなくて困っている').teach], [true, true, true, false, false, false, false]);
+eq('S13 short', [SG('疲れたけど楽しかった').short, SG('あ'.repeat(24)).short, SG('あ'.repeat(25)).short, SG('').short, SG('   ').short], [true, true, false, false, false]);
+eq('S13 emo tone heavy/neutral/pos', [SG('泣きそう').emos[0].tone, SG('緊張した').emos[0].tone, SG('嬉しい').emos[0].tone, SG('ほっとした').emos[0].tone, SG('楽しかった').emos[0].tone], ['mix', 'mix', 'pos', 'pos', 'pos']);
+// お礼の言い回しは投稿の種類で変わる
+{ const a = RD.build({ feeling: 1, dist: 1, word: '', num: '', memo: '', teach: true, seed: 0 }).map(p => p.text).join('|'), b = RD.build({ feeling: 1, dist: 1, word: '', num: '', memo: '', teach: false, seed: 0 }).map(p => p.text).join('|'); ok('S13 thanks tables differ by teach', a !== b && THANKS_TEACH.test(a.replace(/\|/g, '\n')) && !THANKS_TEACH.test(b), [a, b]); }
+eq('S13 heavy', [SG('祖母が亡くなりました').heavy, SG('母が入院しました').heavy, SG('入院しなかった').heavy, SG('今日は走りきった').heavy], [true, true, false, false]);
+eq('S13 joy', [SG('資格試験に合格した').joy, SG('娘が生まれました').joy, SG('お店を開業しました').joy, SG('合格しなかった').joy, SG('合格したい').joy, SG('疲れた').joy], [true, true, true, false, false, false]);
+eq('S13 question words', [SG('受かったよ？信じられる？').question, SG('何を食べたらいいと思いますか').question, SG('今日はどう？ ご飯どこにする？').question], [false, true, true]);
+// 重い話題: 質問も感想も作らない・明るい言い回しを使わない・1行ずつ
+for (let f = 0; f < 6; f++) for (let d = 0; d < 3; d++) for (let s = 0; s < 12; s++) {
+  const pl = RD.build({ feeling: f, dist: d, word: '完走', num: '3km', memo: '', emo: '悔しい', emoTone: 'neg', verb: '落ちた', verbTone: 'other', question: true, heavy: true, joy: true, seed: s }), tx = pl.map(x => x.text);
+  ok('S14 heavy f' + f + 'd' + d + 's' + s, new Set(tx).size === 3 && tx.every(x => x.split('\n').length === 1 && !RD.POS_RE.test(x.replace('ありがとう', '')) && !/[「」?？]|おめでとう|想像|ぼちぼち|同じ疑問/.test(x)) && pl[1].type === 'ひとこと添える', tx);
+}
+// お祝い: お礼・感想・応援は plan1 に「おめでとう」。共感・質問・経験には入れない
+for (let f = 0; f < 6; f++) for (let s = 0; s < 12; s++) {
+  const tx = RD.build({ feeling: f, dist: 1, word: '開業', num: '', memo: '', joy: true, seed: s }).map(x => x.text);
+  ok('S14 joy f' + f + 's' + s, [1, 3, 4].includes(f) ? tx[0].includes('お祝い') || tx[0].includes('おめでとう') : !/おめでとう|お祝い/.test(tx.join('\n')), tx);
+}
+// 共感・経験以外では、質問の投稿でも「同じ疑問」を言わない / 共感・経験では使える
+for (let f = 0; f < 6; f++) for (let d = 0; d < 3; d++) for (let s = 0; s < 12; s++) for (const w of ['', '検算']) {
+  const tx = RD.build({ feeling: f, dist: d, word: w, num: '', memo: '', question: true, seed: s }).map(x => x.text).join('\n');
+  if (f >= 1 && f <= 4) ok('S14 question no claim f' + f + 'd' + d + 's' + s, !/同じ疑問|同じこと気になっ|実は私も|実は自分も/.test(tx), tx);
+}
 eq('S13 null', [RD.pickWords(null).emos, RD.pickWords(null).verbs, RD.pickWords(null).question], [[], [], false]);
 
 // S9 静的チェック: 保存系・外部送信が無い

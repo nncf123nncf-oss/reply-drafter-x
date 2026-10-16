@@ -50,7 +50,7 @@ const ok = (name, c, info) => { if (c) pass++; else { fail++; console.log('NG', 
     // 気持ち・出来事・質問の拾いと「別の言い方で」
     await q(`document.getElementById('clear').click()`); await q(`document.getElementById('sample').click()`);
     const sigs = () => q(`[...document.querySelectorAll('#sigs button')].map(b=>b.firstChild.textContent+(b.getAttribute('aria-pressed')==='true'?'*':''))`);
-    ok(label + ' sigs sample', JSON.stringify(await sigs()) === JSON.stringify(['「泣きそうになる」*', '気持ちの言葉を入れない', '「走りきった」*', '出来事を入れない']), await sigs());
+    ok(label + ' sigs sample', JSON.stringify(await sigs()) === JSON.stringify(['「泣きそうになる」*', '気持ちの言葉を入れない', '「走りきった」*', '出来事を入れない', '教え・コツの投稿として返す']), await sigs());
     ok(label + ' sig-picked', (await q(`document.getElementById('sig-picked').textContent`)).includes('気持ちの言葉 1件') && (await q(`document.getElementById('sig-picked').textContent`)).includes('質問の形: なし'));
     ok(label + ' emo in plan1', (await q(`document.getElementById('plan1').value`)).includes('泣きそうになる'));
     await q(`document.querySelectorAll('#sigs button')[1].click()`);
@@ -63,9 +63,20 @@ const ok = (name, c, info) => { if (c) pass++; else { fail++; console.log('NG', 
     ok(label + ' verb back', (await allText()).includes('走りきった'));
     // 質問の投稿
     await q(`(()=>{const p=document.getElementById('post');p.value='このやり方で合っていますか？ 「検算」が不安です';p.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-    ok(label + ' question detected', (await q(`document.getElementById('sig-picked').textContent`)).includes('質問の形: あり') && (await q(`document.querySelector('#results .card:nth-child(2) h3').textContent`)).includes('質問に答える'), await sigs());
+    ok(label + ' question detected', (await q(`document.getElementById('sig-picked').textContent`)).includes('質問の形: あり') && (await q(`document.querySelector('#results .card:nth-child(2) h3').textContent`)).includes('質問に反応する'), await sigs());
     await q(`[...document.querySelectorAll('#sigs button')].find(b=>b.firstChild.textContent==='質問への返事の形にしない').click()`);
     ok(label + ' question off', (await q(`document.querySelector('#results .card:nth-child(2) h3').textContent`)).includes('質問を返す'));
+    // お礼: 教え・コツの投稿と報告で言い回しが変わる / 短い投稿 / 気持ちは最後に出てきたものが既定
+    await q(`document.getElementById('clear').click()`);
+    await q(`document.querySelectorAll('#feelings button')[1].click()`);
+    await q(`(()=>{const p=document.getElementById('post');p.value='朝活を続けるコツは 前の晩に服を決めておくこと';p.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    ok(label + ' teach auto', /助かり|参考|勉強|学び|役立|役に立/.test(await allText()) && (await q(`document.getElementById('sig-picked').textContent`)).includes('教え・コツ型'), await allText());
+    await q(`[...document.querySelectorAll('#sigs button')].find(b=>b.firstChild.textContent==='教え・コツの投稿として返す').click()`);
+    ok(label + ' teach off -> no teach-only thanks', !/助かり|助かった|助かる|参考に|勉強に|学びに|役立|役に立|収穫|真似/.test(await allText()), await allText());
+    await q(`document.getElementById('clear').click()`);
+    await q(`(()=>{const p=document.getElementById('post');p.value='疲れたけど楽しかった';p.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    ok(label + ' short post: last emotion default', JSON.stringify(await sigs()).includes('「楽しい」*') && JSON.stringify(await sigs()).includes('「疲れる」'), await sigs());
+    ok(label + ' short post: plan1/plan3 one line', (await q(`document.getElementById('plan1').value`)).split('\n').length === 1 && (await q(`document.getElementById('plan3').value`)).split('\n').length === 1);
     await q(`document.getElementById('clear').click()`); await q(`document.getElementById('sample').click()`);
     // 別の言い方(3案まとめて): 毎回変わり、12回で元に戻る(乱数なし)
     const snap3 = () => q(`[...document.querySelectorAll('#results textarea')].map(t=>t.value).join('|')`);

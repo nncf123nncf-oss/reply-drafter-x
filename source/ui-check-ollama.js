@@ -104,7 +104,7 @@ const OUT = process.env.SHOT_DIR || '';
 
     await fresh('ok', ['bad1']); await q(`document.getElementById('sample').click()`);
     await q(`document.getElementById('ai-go').click()`); await waitFor(`/AIの案 \\d件/.test(document.getElementById('ai-state').textContent)`, 5000);
-    const cb1 = await cards(), rule = await q(`RD.build({feeling:0,dist:0,word:'完走',num:'3km',memo:'',emo:'泣きそうになる',verb:'走りきった',verbTone:'pos',question:false,seed:0}).map(p=>p.text)`);
+    const cb1 = await cards(), rule = await q(`RD.build({feeling:0,dist:0,word:'完走',num:'3km',memo:'',emo:'泣きそうになる',emoTone:'mix',verb:'走りきった',verbTone:'pos',question:false,teach:false,short:false,seed:0}).map(p=>p.text)`);
     ok(label + ' C bad1: no retry', ctl.calls.length === 1, ctl.calls.length);
     ok(label + ' C bad1: 2 AI + 1 rule (card 2 replaced, no badge)', cb1.map(c => c.badge).join() === 'true,false,true' && cb1[1].text === rule[1], { b: cb1.map(c => c.badge), t: cb1[1].text, r: rule[1] });
     const sb1 = await state();
