@@ -252,6 +252,8 @@ const STATE_CLAIM = /心をつかまれ|楽しい気持ちに|嬉しくなっ|�
 const SELF_CLAIM = /同じ気持ちになり|覚えが|もそうでし|もそうだった|経験したことが|自分にもあり|自分にもあった|思い出し|重ね/; // 共感・経験を選んだときだけ許す
 const THANKS_TEACH = /助かり|助かった|助かる|参考に|勉強に|学びに|役立|役に立|収穫|真似/;   // 教え・コツの投稿にだけ使ってよいお礼
 const POS_ON_NEG = /好き|楽しい|楽しく|素敵|いい投稿|元気|引き込|嬉しい|よかった|参考になりました|勉強になりました/; // 重い気持ちをなぞる文に使ってはいけない
+// POS_RE とは別に持つ明るい語(重い話題・重い気持ちの案に出てはいけない)
+const BRIGHT = /嬉し|うれし|楽し|面白|素晴|最高|好き|いい投稿|いい時間|元気|すごい|かっこいい|心をつかまれ|ワクワク/;
 const HARD_VERB = /\{v\}(ところ|こと[をがはに])/;               // 動詞を「ところ・こと」で受ける硬い言い方(ほめる側の表)
 const CASUAL_ANY = /ちゃ|じゃ|めっちゃ|ほんと|だよ|だね|ってる|ってた/;
 // S11 表そのものの検査
@@ -337,7 +339,7 @@ for (let f = 0; f < 6; f++) for (let d = 0; d < 3; d++) for (const w of ['', '�
     if (f === 1 && !teach && bodyLines.some(l => THANKS_TEACH.test(l))) note(tag + ' teach-thanks on non-teach', bodyLines.filter(l => THANKS_TEACH.test(l)));
     if (f === 1 && teach && !(bodyLines.length)) note(tag + ' teach empty', tx);
     if (et === 'neg') { const el = bodyLines.filter(l => l.includes(emo)); if (!el.length || el.some(l => POS_ON_NEG.test(l.replace('ありがとう', '')))) note(tag + ' positive echo of heavy emotion', el); }
-    if ((et === 'neg' || vt === 'other') && bodyLines.some(l => RD.POS_RE.test(l.replace('ありがとう', '')))) note(tag + ' bright phrase in gentle mode', bodyLines.filter(l => RD.POS_RE.test(l.replace('ありがとう', ''))));
+    if ((et === 'neg' || vt === 'other') && bodyLines.some(l => BRIGHT.test(l.replace('ありがとう', '').replace(verb, '').replace(emo, '')))) note(tag + ' bright phrase in gentle mode', bodyLines.filter(l => BRIGHT.test(l.replace('ありがとう', '').replace(verb, '').replace(emo, ''))));
     if (short && !memo && (tx[0].split('\n').length > 1 || tx[2].split('\n').length > 1)) note(tag + ' short post not one line', tx);
     // 連続するシードの変化
     if (prev.length) {
@@ -415,7 +417,13 @@ eq('S13 short', [SG('疲れたけど楽しかった').short, SG('あ'.repeat(24)
 eq('S13 emo tone heavy/neutral/pos', [SG('泣きそう').emos[0].tone, SG('緊張した').emos[0].tone, SG('嬉しい').emos[0].tone, SG('ほっとした').emos[0].tone, SG('楽しかった').emos[0].tone], ['mix', 'mix', 'pos', 'pos', 'pos']);
 // お礼の言い回しは投稿の種類で変わる
 { const a = RD.build({ feeling: 1, dist: 1, word: '', num: '', memo: '', teach: true, seed: 0 }).map(p => p.text).join('|'), b = RD.build({ feeling: 1, dist: 1, word: '', num: '', memo: '', teach: false, seed: 0 }).map(p => p.text).join('|'); ok('S13 thanks tables differ by teach', a !== b && THANKS_TEACH.test(a.replace(/\|/g, '\n')) && !THANKS_TEACH.test(b), [a, b]); }
-eq('S13 heavy', [SG('祖母が亡くなりました').heavy, SG('母が入院しました').heavy, SG('入院しなかった').heavy, SG('今日は走りきった').heavy], [true, true, false, false]);
+eq('S13 heavy', [SG('祖母が亡くなりました').heavy, SG('母が入院しました').heavy, SG('入院しなかった').heavy, SG('今日は走りきった').heavy, SG('犬が死んだ').heavy, SG('母の看病で疲れた').heavy], [true, true, false, false, true, true]);
+for (const s of ['交通事故に気をつけてね。今日は雨がひどいです', '病気知らずの1年でした', '事故物件の内見に行ってきた', '手術室のドラマを見て泣いた', '癌検診に行ってきた。結果は問題なしでほっとした', '手術が無事に終わりました', '離婚届を出してきました。すっきりした気持ちです', '事故にあったけど無事でした']) eq('S14 heavy negative: ' + s, SG(s).heavy, false);
+for (const s of ['合格点ギリギリだった', '達成感がすごい', 'オープンソースに初めてPRを出した', '誕生日プレゼントを何にするか迷っている', '結婚式の準備で疲れ果てている', '友達の結婚式に出席してきた', '生まれた町に帰ってきた', '出産が怖くて眠れない', '転職活動で内定をもらえず落ち込んでる', '内定を辞退した']) eq('S14 joy negative: ' + s, SG(s).joy, false);
+for (const s of ['合ってる？', 'この方法でいい？', '夜ふかししてる人いる？', '明日晴れるかな？', 'ブログのやり方はこれで合ってる？']) eq('S14 question positive: ' + s, SG(s).question, true);
+eq('S14 teach negatives', ['手順が多すぎて困っている', '毎日のステップを記録している', '「ポイントは」って聞かれて困った', 'テクニックを磨きたい', '使い方が分からない', 'ブログのやり方はこれで合ってる？'].map(s => SG(s).teach), [false, false, false, false, false, false]);
+eq('S14 teach positives', ['秘訣は毎日続けること', '朝活のコツは早起き', '使い方は簡単です'].map(s => SG(s).teach), [true, true, true]);
+eq('S14 dictionary words not picked as the word', SG('ポイントは毎日の記録です').cands.map(c => c.w).includes('ポイント'), false);
 eq('S13 joy', [SG('資格試験に合格した').joy, SG('娘が生まれました').joy, SG('お店を開業しました').joy, SG('合格しなかった').joy, SG('合格したい').joy, SG('疲れた').joy], [true, true, true, false, false, false]);
 eq('S13 question words', [SG('受かったよ？信じられる？').question, SG('何を食べたらいいと思いますか').question, SG('今日はどう？ ご飯どこにする？').question], [false, true, true]);
 // 重い話題: 質問も感想も作らない・明るい言い回しを使わない・1行ずつ

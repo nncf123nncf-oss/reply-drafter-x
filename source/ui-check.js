@@ -66,6 +66,12 @@ const ok = (name, c, info) => { if (c) pass++; else { fail++; console.log('NG', 
     ok(label + ' question detected', (await q(`document.getElementById('sig-picked').textContent`)).includes('質問の形: あり') && (await q(`document.querySelector('#results .card:nth-child(2) h3').textContent`)).includes('質問に反応する'), await sigs());
     await q(`[...document.querySelectorAll('#sigs button')].find(b=>b.firstChild.textContent==='質問への返事の形にしない').click()`);
     ok(label + ' question off', (await q(`document.querySelector('#results .card:nth-child(2) h3').textContent`)).includes('質問を返す'));
+    // 重い話題: 質問・感想を作らない / 「重い話題として読まない」で通常に戻せる
+    await q(`document.getElementById('clear').click()`);
+    await q(`(()=>{const p=document.getElementById('post');p.value='祖母が亡くなりました';p.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    ok(label + ' heavy: calm cards', (await q(`document.querySelector('#results .card:nth-child(2) h3').textContent`)).includes('ひとこと添える') && (await q(`document.getElementById('sig-picked').textContent`)).includes('重い話題として読みました'));
+    await q(`[...document.querySelectorAll('#sigs button')].find(b=>b.firstChild.textContent==='重い話題として読まない').click()`);
+    ok(label + ' heavy: can turn off', (await q(`document.querySelector('#results .card:nth-child(2) h3').textContent`)).includes('質問を返す'));
     // お礼: 教え・コツの投稿と報告で言い回しが変わる / 短い投稿 / 気持ちは最後に出てきたものが既定
     await q(`document.getElementById('clear').click()`);
     await q(`document.querySelectorAll('#feelings button')[1].click()`);

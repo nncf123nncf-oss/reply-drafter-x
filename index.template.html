@@ -232,7 +232,7 @@ var RD = (function () {
   }
   function oneLine(s) { return clean(s).replace(/\n/g, ' ').trim(); }
 
-  var STOP = ['this', 'that', 'with', 'have', 'from', 'there', 'they', 'what', 'when', 'will', 'would', 'about', 'just', '今日', '昨日', '明日', '今年', '去年', '毎日', '最近', '最初', '最後', '自分', '本当', '今回', '以前', '以上', '以下', '一番', '時間', '場合', '問題', '今朝', '今夜', '今度', '全部', '全然', '必要', '結局', '普通', '意外', '結果', '最高', '今週', '来週', '先週', '先月', '来月', '今月', '毎週', '毎月', '皆様', '皆さん', '感じ', '気持', '本日', '現在', '当時', '一緒', '一人', '二人', '大変', '大事', '大切', '自然', '完全', '少し', '普段', '時々', '以外', '一度', '今後', '来年', '昨年'];
+  var STOP = ['ポイント', 'コツ', '秘訣', '方法', 'やり方', 'ステップ', 'テクニック', '手順', 'ポイントは', 'this', 'that', 'with', 'have', 'from', 'there', 'they', 'what', 'when', 'will', 'would', 'about', 'just', '今日', '昨日', '明日', '今年', '去年', '毎日', '最近', '最初', '最後', '自分', '本当', '今回', '以前', '以上', '以下', '一番', '時間', '場合', '問題', '今朝', '今夜', '今度', '全部', '全然', '必要', '結局', '普通', '意外', '結果', '最高', '今週', '来週', '先週', '先月', '来月', '今月', '毎週', '毎月', '皆様', '皆さん', '感じ', '気持', '本日', '現在', '当時', '一緒', '一人', '二人', '大変', '大事', '大切', '自然', '完全', '少し', '普段', '時々', '以外', '一度', '今後', '来年', '昨年'];
   var UNIT = 'ヶ月|か月|カ月|ヵ月|日間|週間|年間|時間|文字|ページ|キロ|万円|km|kg|cm|mm|ml|%|％|人|回|件|年|週|分|秒|円|個|冊|本|杯|枚|歳|社|店|名|度|倍|割|位|点|行|台|匹|軒|曲|話|章|作|歩|g|m|L|l';
   var NUM_RE = new RegExp('([0-9０-９]+(?:[,，][0-9０-９]{3})*(?:[.．][0-9０-９]+)?)\\s?(' + UNIT + ')(?![A-Za-z])', 'g');
 
@@ -282,7 +282,7 @@ var RD = (function () {
       break;
     }
     var sig = detectSignals(src);
-    return { cands: cands, num: num, emos: sig.emos, verbs: sig.verbs, question: sig.question, teach: !sig.question && TEACH_RE.test(src) && !/教えて|ありますか|ませんか|知りたい/.test(src), short: sig.short, heavy: has(HEAVY_RE, src, /^(しない|しなかっ|ない|なかっ)/), joy: has(JOY_RE, src, NOT_YET) };
+    return { cands: cands, num: num, emos: sig.emos, verbs: sig.verbs, question: sig.question, teach: !sig.question && TEACH_RE.test(src) && !/教えて|ありますか|ませんか|知りたい|困っ/.test(src) && !sig.emos.some(function (x) { return x.tone === 'neg'; }), short: sig.short, heavy: has(HEAVY_RE, src, /^(しない|しなかっ|ない|なかっ)/) && !HEAVY_OK.test(src), joy: has(JOY_RE, src, NOT_YET) };
   }
 
   // 気持ちの言葉。re=活用形をまとめて拾う正規表現 / plain=返信に差し込む言い切りの形(「{e}のは」「{e}気持ち」「{e}んですよね」に続けられる形)
@@ -313,6 +313,9 @@ var RD = (function () {
     { re: /落ち込(む|ん|み)/, plain: '落ち込む', tone: 'neg' },
     { re: /ショック/, plain: 'ショックを受ける', tone: 'neg' },
     { re: /凹(む|ん)|へこ(む|ん)/, plain: '凹む', tone: 'neg' },
+    { re: /辞めたい|やめたい/, plain: '辞めたくなる', tone: 'neg' },
+    { re: /怒られ/, plain: '怒られる', tone: 'neg' },
+    { re: /情けな/, plain: '情けなくなる', tone: 'neg' },
     { re: /(恥ずかし|はずかし)(い|かった|くて|さ|すぎ)/, plain: '恥ずかしい', tone: 'neg' }
   ];
   // 出来事の動詞。tone: pos=ほめてよい(完走・始めた・続けている など) / other=ほめない(落ちた・やめた・休んだ など)
@@ -346,10 +349,13 @@ var RD = (function () {
   ];
   // 拾った言葉の直後がこれなら拾わない: 打ち消し・願望(〜たい)・仮定(〜たら)・依頼・「〜ことがない」・第三者の発言・慣用句
   // 教え・コツ・手順の投稿(お礼で「助かった・参考になった」を使ってよい投稿)
-  var TEACH_RE = /コツは|やり方は|手順|ポイントは|おすすめは|オススメは|がおすすめ|使い方は|テクニック|ステップ|裏技|してみて(ください|ほしい)|すると(いい|よい|良い|楽)|ことをおすすめ/;
-  var HEAVY_RE = /亡くな|他界|逝去|訃報|死去|入院|闘病|余命|看取|癌|離婚|解雇|事故|葬儀|喪中|手術|病気/;
-  var JOY_RE = /生まれ(た|ました)|誕生|出産|結婚|入籍|合格|受かっ(た|ました)|卒業|開業|昇進|内定|達成|優勝|完走|オープン|開店|創業/g;
-  var NOT_YET = /^(し(たい|そう|なか|ない)|できな|したら|する|ない|なかっ)/;
+  var TEACH_RE = /コツは|やり方は|手順は|ポイントは|おすすめは|オススメは|がおすすめ|使い方は|秘訣は|テクニックは|ステップ[0-9１-９]|裏技|してみて(ください|ほしい)|すると(いい|よい|良い|楽)|ことをおすすめ/;
+  // 重い話題: 状況を示す形だけ(「事故物件」「病気知らず」「手術室」「手術が無事に終わった」は除く)
+  var HEAVY_RE = /亡くな|他界|逝去|訃報|死去|死んだ|旅立っ|亡くし|余命|看取|闘病|看病|流産|葬儀|喪中|入院(し|する|が決|中)|離婚(し|が|調停|することに)|解雇(さ|され)|事故(に遭|にあ|で亡|で怪我)|癌(と診断|が見つか|になり)|がん(と診断|が見つか)|手術(を受け|が決|前)|病気(で|に)(なり|なっ|倒れ|寝込|入院)/;
+  var HEAVY_OK = /無事|問題なし|異常なし|ほっと|気をつけ/;
+  // お祝いごと: 「合格点」「達成感」「結婚式の準備」「誕生日」「オープンソース」「生まれた町」は除く
+  var JOY_RE = /生まれ(ました|た)(?!町|故郷|育)|誕生(?!日)|出産(しま|した|予定|が決)|結婚(しま|した|する|が決|することに)|入籍|合格(しま|した|でき|通知|発表)|受かっ(た|ました)|卒業(しま|した|式)|開業(しま|した|する)|昇進|内定(をもらっ|が出|をいただ|を頂)|達成(しま|した|でき)|優勝|完走|オープン(しま|した|します|予定)|開店|創業/g;
+  var NOT_YET = /^([いら]|し(たい|そう|なか|ない)|できな|したら|する|ない|なかっ)/;
   function has(re, src, guard) { var r = new RegExp(re.source, 'g'), m; while ((m = r.exec(src))) { if (!guard || !guard.test(src.slice(m.index + m[0].length, m.index + m[0].length + 6))) return true; } return false; }
   var NEG_NEXT = /^\s?(いない|いなかっ|いません|ない|なかっ|ません|じゃない|ではない|しな|できな|ならな|なく|なさ|ても|てください|てほしい|して(使|利用|ご|お)|と言|って言|と話|そうだ|らしい|もの知らず|わけがない|必要)/;
   var VERB_NEXT = /^([いくらりばろ]|こと(が|は)?(ない|なかっ|あ))/; // 動詞だけ: 〜たい・〜たら・〜たり・〜ばかり・〜ことがない
@@ -372,7 +378,7 @@ var RD = (function () {
       hits.forEach(function (h) { if (out.length < 3 && !out.some(function (o) { return o.w === h.w; })) out.push({ w: h.w, kind: h.kind, tone: h.tone }); });
       return out;
     }
-    return { emos: scan(EMOS, '気持ちの言葉'), verbs: scan(VERBS, '出来事'), short: (function () { var n = Array.from(src.trim()).length; return n > 0 && n <= 24; })(), question: /でしょうか|(ですか|ますか)(?!ら)|どう思い|教えて(ほしい|ください|もらえ|いただ)|どなたか/.test(src) || (/[？?]/.test(src) && /どう|何|なに|いつ|なぜ|どこ|誰|どれ|どの|いくら|コツ|おすすめ/.test(src)) };
+    return { emos: scan(EMOS, '気持ちの言葉'), verbs: scan(VERBS, '出来事'), short: (function () { var n = Array.from(src.trim()).length; return n > 0 && n <= 24; })(), question: /でしょうか|(ですか|ますか)(?!ら)|どう思い|教えて(ほしい|ください|もらえ|いただ)|どなたか/.test(src) || (/[？?]/.test(src) && !/(信じられる|よね|ですよね|でしょ)[？?]/.test(src)) };
   }
 
   var DISTS = [{ name: '初めて話す' }, { name: '何度か話した' }, { name: '仲がいい' }];
@@ -382,7 +388,7 @@ var RD = (function () {
   var Q = [
     ['差し支えなければ もう少し詳しくお聞きしてもよいですか', 'もう少し詳しく聞いてもいいですか', 'もうちょっと詳しく聞かせて'],
     ['続きがあれば 聞かせていただけますか', '続きがあれば 聞かせてもらえますか', '続きがあれば 聞かせて'],
-    ['ひとつ 聞いてもよろしいですか', 'ひとつ 聞いてもいいですか', 'ひとつ 聞いてもいい'],
+    ['あとで 続きを聞かせていただけますか', 'あとで 続きを聞かせてもらえますか', 'あとで 続き聞かせて'],
     ['よろしければ 続きも聞きたいです', 'よければ 続きも聞きたいです', 'よければ 続き聞きたい']
   ];
   var QW = [
@@ -632,7 +638,8 @@ var RD = (function () {
         ['この投稿 好きです', 'この投稿 好きですね', 'この投稿 好き'],
         ['読んでいて 楽しかったです', '読んでいて 楽しかったですね', '読んでて 楽しかった'],
         ['いい投稿でした', 'いい投稿ですね', 'いい投稿だった'],
-        ['読めてよかったです', '読めて嬉しかったです', '読めてよかった']
+        ['読めてよかったです', '読めて嬉しかったです', '読めてよかった'],
+        ['書いてくださって ありがとうございます', '書いてくれて ありがとうございます', '書いてくれて ありがとう']
       ],
       EMP2: [
         ['最後まで すっと読めました', '最後まで すらすら読めました', '最後まで すらすら読めた'],
@@ -741,7 +748,7 @@ var RD = (function () {
   ];
   function fill(t, w, n, e, v) { return t.replace(/\{([wnev])\}/g, function (m, k) { return k === 'w' ? w : k === 'n' ? n : k === 'e' ? e : v; }); }
 
-  var POS_RE = /好き|楽しい|楽しく|楽しみ|素敵|いい投稿|いい時間|元気|引き込|嬉しい|嬉しく|すごい|かっこいい|心をつかまれ|よかった|応援したくな|ぐっと/;
+  var POS_RE = /好き|楽し|素敵|いい投稿|いい時間|元気|引き込|嬉し|うれし|すごい|かっこいい|心をつかまれ|よかった|応援したくな|ぐっと|面白|素晴|最高|ワクワク|いい話|いい文章/;
   var SEEDS = 12; // 言い回しの巡回の長さ。乱数は使わず、番号(シード)だけで決める
   function mod(s) { s = (s | 0) % SEEDS; return s < 0 ? s + SEEDS : s; }
   function opener(t) { return Array.from(t.split('\n')[0]).slice(0, 4).join(''); }
@@ -757,7 +764,7 @@ var RD = (function () {
     var F = (f.alt && !opts.teach) ? f.alt : f, short = !!opts.short;
     var verbArr = opts.verbTone === 'pos' ? F.VERB : VERB_OTHER, emoArr = opts.emoTone === 'neg' ? EMO_NEG : opts.emoTone === 'mix' ? EMO_MIX : F.EMO;
     // 重い気持ち・ほめない出来事のとき: 「好き・楽しい・すごい・元気」など明るい言い回しを案ぜんたいから外す
-    var gentle = opts.emoTone === 'neg' || (!!v && opts.verbTone === 'other'), heavy = !!opts.heavy, joy = !!opts.joy && !q0() && !heavy && (opts.feeling === 1 || opts.feeling === 3 || opts.feeling === 4);
+    var gentle = opts.emoTone === 'neg' || (!!v && opts.verbTone === 'other'), heavy = !!opts.heavy, joy = !!opts.joy && !q0() && !heavy && !gentle && (opts.feeling === 1 || opts.feeling === 3 || opts.feeling === 4);
     function q0() { return !!opts.question; }
     // 既定で毎回同じ型に見えないよう、気持ちと距離感ごとに巡回の出発点をずらす
     var base = mod((opts.seed | 0) + opts.feeling * 5 + d * 7), bump = opts.bump || [0, 0, 0];
@@ -804,7 +811,7 @@ var RD = (function () {
       for (var i = 0; i < extra.length && lines.length < 2; i++) lines.push(extra[i]);
       var target = (s % 3 === 2 || short) ? 1 : 2;
       if (!lines.length && target === 2) lines.push(T(F.EMP, s, 3));
-      if (!lines.length || lines.length < target) lines.push(T(F.CLOSE, s, 0, last(lines)));
+      if (!lines.length || lines.length < target) lines.push(T(q ? QA_TAIL : F.CLOSE, s, 0, last(lines)));
       return lines;
     };
     function plan1H(s) { return [T(HEAVY1, s, 0)]; }
@@ -824,7 +831,7 @@ var RD = (function () {
     return [
       { type: f.label1, text: t1, needsMemo: false },
       { type: heavy ? 'ひとこと添える' : q ? '質問に反応する' : '質問を返す', text: t2, needsMemo: false },
-      { type: '自分の体験を一行足す', text: t3, needsMemo: !memo }
+      { type: heavy ? '寄り添いの一言' : '自分の体験を一行足す', text: t3, needsMemo: !memo && !heavy }
     ];
   }
   var LIMIT = 280;
@@ -970,7 +977,7 @@ var RD = (function () {
   var $ = function (id) { return document.getElementById(id); };
   var postEl = $('post'), manualEl = $('manual'), memoEl = $('memo'), resEl = $('results'), statusEl = $('status');
   var SAMPLE = '今日 初めて3kmを走りきった。走るのが苦手だったので「完走」できただけで泣きそうになった #ランニング初心者';
-  var st = { feeling: 0, dist: 0, sel: -1, numOff: false, emo: -1, verb: -1, qOff: false, teach: null, seed: 0, bump: [0, 0, 0] };
+  var st = { feeling: 0, dist: 0, sel: -1, numOff: false, emo: -1, verb: -1, qOff: false, heavyOff: false, teach: null, seed: 0, bump: [0, 0, 0] };
   var picks = { cands: [], num: '', emos: [], verbs: [], question: false, teach: false, short: false, heavy: false, joy: false };
   function teachOn() { return st.teach === null ? picks.teach : st.teach; }
 
@@ -1028,7 +1035,7 @@ var RD = (function () {
     var parts = [];
     if (!postEl.value.trim()) info.textContent = '投稿を貼ると、ここに拾った気持ちの言葉・出来事・質問が並びます';
     else {
-      parts.push('気持ちの言葉 ' + picks.emos.length + '件'); parts.push('出来事 ' + picks.verbs.length + '件'); parts.push(picks.question ? '質問の形: あり（2案目を答えの形にします）' : '質問の形: なし'); parts.push(picks.heavy ? '重い話題として読みました（質問は作らず、受け止める一言にします）' : teachOn() ? '投稿の種類: 教え・コツ型' : '投稿の種類: 報告・近況型'); if (picks.joy && !picks.heavy) parts.push('お祝いごと: あり（お礼・感想・応援に「おめでとう」を入れます）');
+      parts.push('気持ちの言葉 ' + picks.emos.length + '件'); parts.push('出来事 ' + picks.verbs.length + '件'); parts.push(picks.question ? '質問の形: あり（2案目を答えの形にします）' : '質問の形: なし'); parts.push(picks.heavy && !st.heavyOff ? '重い話題として読みました（質問は作らず、受け止める一言にします）' : teachOn() ? '投稿の種類: 教え・コツ型' : '投稿の種類: 報告・近況型'); if (picks.joy && !picks.heavy) parts.push('お祝いごと: あり（お礼・感想・応援に「おめでとう」を入れます）');
       info.textContent = '拾えたもの: ' + parts.join(' ／ ') + (picks.emos.length || picks.verbs.length || picks.question ? '（押して選び直せます）' : '（拾えなくても下書きは作れます）');
     }
     picks.emos.forEach(function (c, i) { sigBtn(box, '「' + c.w + '」', c.kind, st.emo === i, function () { st.emo = i; buildSigs(); renderResults(); }); });
@@ -1036,6 +1043,7 @@ var RD = (function () {
     picks.verbs.forEach(function (c, i) { sigBtn(box, '「' + c.w + '」', c.kind, st.verb === i, function () { st.verb = i; buildSigs(); renderResults(); }); });
     if (picks.verbs.length) sigBtn(box, '出来事を入れない', '', st.verb === -1, function () { st.verb = -1; buildSigs(); renderResults(); });
     if (picks.question) sigBtn(box, '質問への返事の形にしない', '', st.qOff, function () { st.qOff = !st.qOff; buildSigs(); renderResults(); });
+    if (picks.heavy) sigBtn(box, '重い話題として読まない', '質問や感想も作ります', st.heavyOff, function () { st.heavyOff = !st.heavyOff; buildSigs(); renderResults(); });
     if (postEl.value.trim()) sigBtn(box, '教え・コツの投稿として返す', 'お礼のとき「助かった」を使います', teachOn(), function () { st.teach = !teachOn(); buildSigs(); renderResults(); });
     if (fi >= 0 && box.children[fi]) box.children[fi].focus(); // 押したボタンの位置にフォーカスを戻す
   }
@@ -1063,7 +1071,7 @@ var RD = (function () {
   function buildOpts() {
     var em = activeEmo(), vb = activeVerb();
     return { feeling: st.feeling, dist: st.dist, word: activeWord(), num: st.numOff ? '' : picks.num, memo: memoEl.value,
-      emo: em ? em.w : '', emoTone: em ? em.tone : '', verb: vb ? vb.w : '', verbTone: vb ? vb.tone : '', question: picks.question && !st.qOff, teach: teachOn(), short: picks.short, heavy: picks.heavy, joy: picks.joy, seed: st.seed, bump: st.bump.slice() };
+      emo: em ? em.w : '', emoTone: em ? em.tone : '', verb: vb ? vb.w : '', verbTone: vb ? vb.tone : '', question: picks.question && !st.qOff, teach: teachOn(), short: picks.short, heavy: picks.heavy && !st.heavyOff, joy: picks.joy, seed: st.seed, bump: st.bump.slice() };
   }
   function seedNote() { $('again-n').textContent = '言い回し ' + (st.seed + 1) + '/' + RD.SEEDS + '（押すたびに順番に切り替わります）' + (st.bump.some(function (x) { return x; }) ? ' ／ 案ごとに切り替えた案があります' : ''); }
   // 1枚の案のカード。isAI: AIの案か
@@ -1237,7 +1245,7 @@ var RD = (function () {
   var lastHead = '';
   function onPost() {
     var head = Array.from(postEl.value.trim()).slice(0, 12).join('');
-    if (head !== lastHead && !(lastHead && head.indexOf(lastHead) === 0) && !(head && lastHead.indexOf(head) === 0)) { st.teach = null; st.qOff = false; }
+    if (head !== lastHead && !(lastHead && head.indexOf(lastHead) === 0) && !(head && lastHead.indexOf(head) === 0)) { st.teach = null; st.qOff = false; st.heavyOff = false; }
     lastHead = head;
     var prevWord = st.sel >= 0 && picks.cands[st.sel] ? picks.cands[st.sel].w : null, wasNone = st.sel === -1 && picks.cands.length > 0;
     var pe = activeEmo(), pv = activeVerb(), eNone = st.emo === -1 && picks.emos.length > 0, vNone = st.verb === -1 && picks.verbs.length > 0;
@@ -1256,7 +1264,7 @@ var RD = (function () {
     if (gen) { say('AIの作成中です。終わるか、中止してから押してください'); return; }
     st.seed = (st.seed + 1) % RD.SEEDS; st.bump = [0, 0, 0]; renderResults(); say('3案とも別の言い方にしました');
   });
-  $('clear').addEventListener('click', function () { postEl.value = ''; manualEl.value = ''; memoEl.value = ''; st.feeling = 0; st.dist = 0; st.numOff = false; st.sel = -1; st.emo = -1; st.verb = -1; st.qOff = false; st.teach = null; st.seed = 0; st.bump = [0, 0, 0]; init(); });
+  $('clear').addEventListener('click', function () { postEl.value = ''; manualEl.value = ''; memoEl.value = ''; st.feeling = 0; st.dist = 0; st.numOff = false; st.sel = -1; st.emo = -1; st.verb = -1; st.qOff = false; st.heavyOff = false; st.teach = null; st.seed = 0; st.bump = [0, 0, 0]; init(); });
 
   function init() {
     mkGroup($('feelings'), RD.FEELINGS, 'feeling', renderResults);
