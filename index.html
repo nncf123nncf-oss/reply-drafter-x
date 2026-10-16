@@ -61,6 +61,8 @@
   .warn { margin: 0 0 8px; padding: 6px 10px; border-radius: 6px; background: var(--warn-bg); color: var(--warn-ink); border-left: 4px solid var(--warn-ink); font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
   .card .hint { margin: 0 0 8px; }
   .card button { width: 100%; }
+  .card button.sub { margin-top: 8px; font-size: 14px; }
+  .again-hint { margin: 0 0 10px; }
   #status { min-height: 24px; font-size: 14px; font-weight: 700; color: var(--accent); margin: 0 0 8px; }
 
   .badge { display: inline-block; margin-left: 6px; padding: 0 8px; border-radius: 4px; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700; }
@@ -125,6 +127,11 @@
           <input type="text" id="manual" maxlength="24" autocomplete="off" placeholder="例: 完走">
         </div>
         <div class="field">
+          <span class="lab" id="sig-lab">投稿の気持ち・出来事・質問（貼った文から拾います）</span>
+          <p class="picked" id="sig-picked"></p>
+          <div class="cands" id="sigs" role="group" aria-labelledby="sig-lab"></div>
+        </div>
+        <div class="field">
           <label for="memo">一言メモ（任意・3案目に入ります）</label>
           <textarea id="memo" rows="2" maxlength="80" autocomplete="off" placeholder="自分の一行を書きます（例: 私も先月から走り始めました）"></textarea>
           <p class="hint">句読点（。、）は自動で取り除きます。実在の人や取引先の名前は入れないでください</p>
@@ -146,6 +153,8 @@
           <p class="aistate" id="ai-state" aria-live="off"></p>
           <p class="hint">入力は、このPCの中のOllamaにだけ送られます。インターネットには送られません。AIの案は事実と違うことがあります。送る前に読み直してください</p>
         </div>
+        <div class="btns"><button type="button" id="again">3案まとめて別の言い方で</button></div>
+        <p class="hint again-hint" id="again-n"></p>
         <div id="results"></div>
         <p class="hint">文字数は文字の数、ユニット数は全角などを2・半角などを1として数えた目安です。Xの実際の数え方と一致しないことがあります。280ユニットは目安で、超えると警告が出ます。条件を変えると案は作り直され、手で直した内容は消えます</p>
       </section>
@@ -155,8 +164,9 @@
   <details class="panel">
     <summary>見ているもの・見ないもの</summary>
     <ul>
-      <li>見ているもの: 貼った文の「」の中・#タグ・目立つ言葉（カタカナ・漢字・英単語のうち長いもの）・数字のついた数量（3kg・100人など）</li>
-      <li>見ないもの: 文の意味・書き手の感情や人柄・@から空白までの語（ユーザー名）・URL・日付</li>
+      <li>見ているもの: 貼った文の「」の中・#タグ・目立つ言葉（カタカナ・漢字・英単語のうち長いもの）・数字のついた数量（3kg・100人など）・辞書にある気持ちの言葉（嬉しい・悔しい・不安・泣きそう など）・出来事の動詞（走りきった・続けている・落ちた など）・質問の形（？・でしょうか など）</li>
+      <li>見ないもの: 文の意味・書き手の人柄・辞書にない言い方・@から空白までの語（ユーザー名）・URL・日付。「嬉しくない」「辞めたい」「受かったら」「〜と言っていた」のように、打ち消し・願望・仮定・他人の発言が続く言葉はなるべく拾わない作りですが、取りこぼしや誤りはあります</li>
+      <li>言い回し: 気持ち×距離感ごとに4種類ずつ用意しています。「別の言い方で」で順番に切り替わります（乱数は使わず、12通りで一巡します）</li>
       <li>作らないもの: 投稿の送信・履歴・保存・書き出し。コピーだけできます</li>
       <li>返信がつく・関係が深まるといった効果は測っていません。生成した文が自然に読めるかは、使う人が読んで確かめてください</li>
     </ul>
@@ -269,61 +279,443 @@ var RD = (function () {
       if (num.length > 12) { num = ''; continue; }
       break;
     }
-    return { cands: cands, num: num };
+    var sig = detectSignals(src);
+    return { cands: cands, num: num, emos: sig.emos, verbs: sig.verbs, question: sig.question };
+  }
+
+  // 気持ちの言葉。re=活用形をまとめて拾う正規表現 / plain=返信に差し込む言い切りの形(「{e}のは」「{e}気持ち」「{e}んですよね」に続けられる形)
+  var EMOS = [
+    { re: /(嬉し|うれし)(い|かった|くて|くなっ|さ|そう|すぎ)/, plain: '嬉しい', tone: 'pos' },
+    { re: /(悔し|くやし)(い|かった|くて|さ|すぎ|がっ)/, plain: '悔しい', tone: 'neg' },
+    { re: /不安(だ|で|に|が|な(?!く)|を|です|だった|すぎ|感)/, plain: '不安になる', tone: 'neg' },
+    { re: /(楽し|たのし)(い|かった|くて|さ|すぎ)/, plain: '楽しい', tone: 'pos' },
+    { re: /疲れ(た|て|る|ま|ち|切|が|果)/, plain: '疲れる', tone: 'neg' },
+    { re: /泣きそう/, plain: '泣きそうになる', tone: 'pos' },
+    { re: /泣(い|け)(た|て|ちゃ|てしまっ)/, plain: '泣いてしまう', tone: 'pos' },
+    { re: /びっくり|ビックリ|驚い|驚き/, plain: 'びっくりする', tone: 'pos' },
+    { re: /緊張/, plain: '緊張する', tone: 'pos' },
+    { re: /ドキドキ|どきどき/, plain: 'ドキドキする', tone: 'pos' },
+    { re: /安心/, plain: '安心する', tone: 'pos' },
+    { re: /ほっと/, plain: 'ほっとする', tone: 'pos' },
+    { re: /つら(い|かった|くて|さ|すぎ)/, plain: 'つらい', tone: 'neg' },
+    { re: /しんど(い|かった|くて|さ|すぎ)/, plain: 'しんどい', tone: 'neg' },
+    { re: /(寂し|さびし|淋し)(い|かった|くて|さ|すぎ)/, plain: '寂しい', tone: 'neg' },
+    { re: /(怖|こわ)(い|かった|くて|さ|すぎ)/, plain: '怖い', tone: 'neg' },
+    { re: /ワクワク|わくわく/, plain: 'ワクワクする', tone: 'pos' },
+    { re: /焦(る|った|って|り)/, plain: '焦る', tone: 'neg' },
+    { re: /感動|胸が熱/, plain: '感動する', tone: 'pos' },
+    { re: /(悲し|かなし)(い|かった|くて|さ|すぎ)/, plain: '悲しい', tone: 'neg' },
+    { re: /イライラ|いらいら|腹が立/, plain: 'イライラする', tone: 'neg' },
+    { re: /迷(う|った|って|い)/, plain: '迷う', tone: 'neg' },
+    { re: /モヤモヤ|もやもや/, plain: 'モヤモヤする', tone: 'neg' },
+    { re: /(恥ずかし|はずかし)(い|かった|くて|さ|すぎ)/, plain: '恥ずかしい', tone: 'neg' }
+  ];
+  // 出来事の動詞。tone: pos=ほめてよい(完走・始めた・続けている など) / other=ほめない(落ちた・やめた・休んだ など)
+  var VERBS = [
+    { re: /走りきっ(た|ました)/, plain: '走りきった', tone: 'pos' },
+    { re: /完走(し|でき)(た|ました)/, plain: '完走した', tone: 'pos' },
+    { re: /走っ(てい|てき)/, plain: '走っている', tone: 'pos' },
+    { re: /走っ(た|ました)/, plain: '走った', tone: 'pos' },
+    { re: /歩い(た|ました)/, plain: '歩いた', tone: 'pos' },
+    { re: /始め(た|ました)/, plain: '始めた', tone: 'pos' },
+    { re: /続け(てい|てき)/, plain: '続けている', tone: 'pos' },
+    { re: /続け(た|ました)/, plain: '続けた', tone: 'pos' },
+    { re: /頑張っ(てい|てき)/, plain: '頑張っている', tone: 'pos' },
+    { re: /頑張っ(た|ました)/, plain: '頑張った', tone: 'pos' },
+    { re: /挑戦し(てい|てき)/, plain: '挑戦している', tone: 'pos' },
+    { re: /挑戦し(た|ました)/, plain: '挑戦した', tone: 'pos' },
+    { re: /受かっ(た|ました)/, plain: '受かった', tone: 'pos' },
+    { re: /合格し(た|ました)/, plain: '合格した', tone: 'pos' },
+    { re: /達成し(た|ました)/, plain: '達成した', tone: 'pos' },
+    { re: /終え(た|ました)/, plain: '終えた', tone: 'pos' },
+    { re: /見つけ(た|ました)/, plain: '見つけた', tone: 'pos' },
+    { re: /作っ(た|ました)/, plain: '作った', tone: 'pos' },
+    { re: /(勉強|練習)し(てい|てき)/, plain: null, tone: 'pos', suffix: 'している' },
+    { re: /(勉強|練習)し(た|ました)/, plain: null, tone: 'pos', suffix: 'した' },
+    { re: /決め(た|ました)/, plain: '決めた', tone: 'other' },
+    { re: /終わっ(た)/, plain: '終わった', tone: 'other' },
+    { re: /(やめ|辞め)(た|ました)/, plain: 'やめた', tone: 'other' },
+    { re: /休ん(だ|でいる|でしまっ)/, plain: '休んだ', tone: 'other' },
+    { re: /引っ越し(た|ました)/, plain: '引っ越した', tone: 'other' },
+    { re: /買っ(た|ました)/, plain: '買った', tone: 'other' },
+    { re: /通っ(てい|てき)/, plain: '通っている', tone: 'other' },
+    { re: /落ち(た|ました|ちゃっ)/, plain: '落ちた', tone: 'other' },
+    { re: /失敗し(た|ました)/, plain: '失敗した', tone: 'other' },
+    { re: /転ん(だ)/, plain: '転んだ', tone: 'other' }
+  ];
+  // 拾った言葉の直後がこれなら拾わない: 打ち消し・願望(〜たい)・仮定(〜たら)・依頼・「〜ことがない」・第三者の発言・慣用句
+  var NEG_NEXT = /^\s?(いない|いなかっ|いません|ない|なかっ|ません|じゃない|ではない|しな|できな|ならな|なく|なさ|ても|てください|てほしい|して(使|利用|ご|お)|と言|って言|と話|そうだ|らしい|もの知らず|わけがない|必要)/;
+  var VERB_NEXT = /^([いくらりばろ]|こと(が|は)?(ない|なかっ|あ))/; // 動詞だけ: 〜たい・〜たら・〜たり・〜ばかり・〜ことがない
+  // 投稿から、辞書にある気持ちの言葉・出来事の動詞(出てきた順に最大3件ずつ)と、質問かどうかを拾う。打ち消し(〜ない)が続くものは拾わない
+  function detectSignals(src) {
+    function scan(list, kind) {
+      var hits = [];
+      list.forEach(function (it) {
+        var re = new RegExp(it.re.source, 'g'), m;
+        while ((m = re.exec(src))) {
+          var nx = src.slice(m.index + m[0].length, m.index + m[0].length + 6);
+          if (NEG_NEXT.test(nx) || (list === VERBS && VERB_NEXT.test(nx))) continue;
+          var plain = it.plain || (m[1] + it.suffix);
+          hits.push({ w: plain, kind: kind, tone: it.tone || '', pos: m.index });
+          break;
+        }
+      });
+      hits.sort(function (a, b) { return a.pos - b.pos; });
+      var out = [];
+      hits.forEach(function (h) { if (out.length < 3 && !out.some(function (o) { return o.w === h.w; })) out.push({ w: h.w, kind: h.kind, tone: h.tone }); });
+      return out;
+    }
+    return { emos: scan(EMOS, '気持ちの言葉'), verbs: scan(VERBS, '出来事'), question: /[？?]|でしょうか|(ですか|ますか)(?!ら)|どう思い|教えて(ほしい|ください|もらえ|いただ)|どなたか/.test(src) };
   }
 
   var DISTS = [{ name: '初めて話す' }, { name: '何度か話した' }, { name: '仲がいい' }];
-  var Q = ['差し支えなければ もう少し詳しくお聞きしてもよいですか', 'もう少し詳しく聞いてもいいですか', 'もうちょっと詳しく聞かせて'];
-  var QW = ['「{w}」について 差し支えなければもう少しお聞きしてもよいですか', '「{w}」のこと もう少し聞いてもいいですか', '「{w}」のこと もうちょっと聞かせて'];
-  var NUMLINE = ['{n}という数字が心に残りました', '{n}という数字が印象に残りました', '{n}ってすごいね'];
+  // 言い回しの表。1つの言い回し = [初めて話す, 何度か話した, 仲がいい] の3つ組。1スロットに4種類以上。
+  // {w}=拾った言葉 {n}=数量 {e}=気持ちの言葉(言い切り) {v}=出来事の動詞
+  // 4種類は構文を変えてある(言い切り・体言止めに近い短い一言・〜ですよね・理由を足す形・質問形)
+  var Q = [
+    ['差し支えなければ もう少し詳しくお聞きしてもよいですか', 'もう少し詳しく聞いてもいいですか', 'もうちょっと詳しく聞かせて'],
+    ['もう少し背景を教えていただけますか', 'もう少し背景を教えてもらえますか', 'もう少し背景を教えて'],
+    ['どんなふうに考えられたのか 気になります', 'どんなふうに考えたのか 気になります', 'どう考えたのか 気になる'],
+    ['ほかにも似たことはありましたか', 'ほかにも似たことってありましたか', 'ほかにも似たことあった']
+  ];
+  var QW = [
+    ['差し支えなければ 「{w}」についてもう少しお聞きしてもよいですか', 'よければ 「{w}」のこと もう少し聞いてもいいですか', 'よければ 「{w}」のこと もうちょっと聞かせて'],
+    ['もう少し「{w}」について 教えていただけると嬉しいです', 'もう少し「{w}」について 教えてもらえると嬉しいです', 'もう少し「{w}」のこと 教えてくれると嬉しい'],
+    ['ちなみに「{w}」で 一番大変だったのはどのあたりですか', 'ちなみに「{w}」で 一番大変だったのはどこですか', 'ちなみに「{w}」で 一番大変だったのはどこだった'],
+    ['ひとつ 「{w}」のきっかけを 聞いてもよろしいですか', 'ひとつ 「{w}」のきっかけを 聞いてもいいですか', 'ひとつ 「{w}」のきっかけ 聞いてもいい']
+  ];
+  // 貼った投稿が質問のとき(2案目を答えの形にする)
+  var QA = [
+    ['私も同じことが気になっています', '私も同じこと気になってるんです', '私も同じこと気になってる'],
+    ['答えが出たら 私も知りたいです', '答えが分かったら 私も知りたいです', '答えが分かったら 自分も知りたい'],
+    ['実は私も 同じ疑問を持っていました', '実は私も 同じ疑問がありました', '実は自分も 同じ疑問があった'],
+    ['その問いかけ 考えさせられます', 'その問いかけ 考えさせられました', 'その問い 考えさせられる']
+  ];
+  var QAW = [
+    ['私も「{w}」については 同じことが気になっています', '私も「{w}」は 気になっています', '自分も「{w}」は 気になってる'],
+    ['実は「{w}」の答え 私も知りたいです', '実は「{w}」の答え 私も知りたいなと思っています', '実は「{w}」の答え 自分も知りたい'],
+    ['私も「{w}」のこと 同じ疑問を持っていました', '私も「{w}」のこと 疑問に思っていました', '自分も「{w}」のこと 疑問だった'],
+    ['この「{w}」の問いかけ 考えさせられました', 'この「{w}」の問いかけ 考えさせられますね', 'この「{w}」の問い 考えさせられた']
+  ];
+  var QA_TAIL = [
+    ['お考えを聞けたら嬉しいです', '考えを聞けたら嬉しいです', '考え聞けたら嬉しい'],
+    ['よければ お話を聞かせてください', 'よければ 聞かせてくださいね', 'よければ 聞かせて'],
+    ['ほかの方の答えも気になります', 'ほかの人の答えも気になりますね', 'ほかの人の答えも気になる'],
+    ['また経過を教えていただけたら嬉しいです', 'また経過を教えてもらえたら嬉しいです', 'また経過を教えてもらえたら嬉しいな']
+  ];
+  var NUMLINE = [
+    ['{n}という数字が 心に残りました', '{n}という数字が 印象に残りました', '{n}って数字 すごいね'],
+    ['{n}という数字から 頑張りが伝わってきます', '{n}という数字から 頑張りが伝わってきますね', '{n}って数字から 頑張りが伝わるよ'],
+    ['{n}と聞くと 重みを感じます', '{n}と聞くと 重みがありますよね', '{n}って聞くと 重みあるね'],
+    ['{n}は 本当にすごいです', '{n}は すごいですね', '{n}は すごいね']
+  ];
+  // 出来事の動詞が「落ちた」「やめた」などのとき(気持ちに関係なく共通・ほめない)
+  var VERB_OTHER = [
+    ['{v}ときは いろいろ考えますよね', '{v}ときは いろいろ考えちゃいますよね', '{v}ときって いろいろ考えるよね'],
+    ['{v}ことを 話してくださって ありがとうございます', '{v}ことを 話してくれて ありがとうございます', '{v}ことを 話してくれて ありがとう'],
+    ['{v}ときの気持ち 想像しています', '{v}ときの気持ち 想像していました', '{v}ときの気持ち 想像してる'],
+    ['{v}ときの話 ゆっくり読んでいます', '{v}ときの話 ゆっくり読んでますね', '{v}ときの話 ゆっくり読んでるよ']
+  ];
+  // 気持ちの言葉が重いもの(つらい・悔しい・不安 など)のとき(気持ちに関係なく共通・ほめない)
+  var EMO_NEG = [
+    ['{e}気持ち 受け止めています', '{e}気持ち 受け止めてます', '{e}気持ち 受け止めてるよ'],
+    ['{e}ときは そうなりますよね', '{e}ときは そうなっちゃいますよね', '{e}ときは そうなるよね'],
+    ['{e}ことを 話してくださって ありがとうございます', '{e}ことを 話してくれて ありがとうございます', '{e}ことを 話してくれて ありがとう'],
+    ['{e}ときの気持ち 想像しています', '{e}ときの気持ち 想像していました', '{e}ときの気持ち 想像してる']
+  ];
   var FEELINGS = [
     { name: '共感したい', label1: '共感を重ねる', numLine: false,
-      EMP: ['その気持ち よく分かります', 'その気持ち 分かります', 'その気持ち 分かるよ'],
-      EMP2: ['自分も同じことを思っていました', '自分も同じこと思ってました', '自分も同じこと思ってた'],
-      REACT: ['「{w}」のところ すごく分かります', '「{w}」のところ 分かります', '「{w}」のとこ 分かるよ'],
-      CLOSE: ['書いてくださってありがとうございます', '書いてくれてありがとうございます', '書いてくれてありがとう'] },
+      EMP: [
+        ['その気持ち よく分かります', 'その気持ち 分かります', 'その気持ち 分かるよ'],
+        ['よく分かるお話です', '分かるお話ですね', 'それ ほんと分かる'],
+        ['そう感じますよね', 'そう思っちゃいますよね', 'そう思うよね'],
+        ['気持ちの揺れ 伝わってきます', '気持ちが伝わってきました', '気持ち 伝わってきたよ']
+      ],
+      EMP2: [
+        ['自分も同じことを思っていました', '自分も同じこと思ってました', '自分も同じこと思ってた'],
+        ['言葉にしてもらえて すっきりしました', '言葉にしてくれて すっきりしました', '言葉にしてくれて すっきりした'],
+        ['読んでいて うなずいてしまいました', '読んでて うなずいちゃいました', '読んでて うなずいちゃった'],
+        ['私だけではないと思えました', '自分だけじゃないと思えました', '自分だけじゃないって思えた']
+      ],
+      REACT: [
+        ['「{w}」のところ よく分かります', '「{w}」のところ 分かります', '「{w}」のとこ 分かるよ'],
+        ['「{w}」に 私も同じ気持ちになりました', '「{w}」って 私も同じ気持ちになります', '「{w}」って 同じ気持ちになるよね'],
+        ['特に「{w}」の一言に うなずきました', '特に「{w}」の一言に うなずきましたよ', '特に「{w}」の一言に うなずいた'],
+        ['「{w}」と書かれていて 同じだと思いました', '「{w}」と書いてあって 同じだなと思いました', '「{w}」って書いてあって 同じだなって思った']
+      ],
+      CLOSE: [
+        ['書いてくださってありがとうございます', '書いてくれてありがとうございます', '書いてくれてありがとう'],
+        ['話してくださって 心が軽くなりました', '話してくれて 心が軽くなりました', '話してくれて 気持ちが軽くなった'],
+        ['また聞かせていただけたら嬉しいです', 'また聞かせてもらえたら嬉しいです', 'また聞かせてね'],
+        ['お互いぼちぼち いきましょう', 'お互いぼちぼち いきましょうね', 'お互いぼちぼち いこうね']
+      ],
+      EMO: [
+        ['{e}のは よく分かります', '{e}の 分かります', '{e}の 分かるよ'],
+        ['{e}気持ち よく分かります', '{e}気持ち 分かりますよ', '{e}気持ち 分かる'],
+        ['{e}こと 私にもあります', '{e}こと 私にもありますよ', '{e}こと 自分にもあるよ'],
+        ['{e}ものですよね', '{e}んですよね', '{e}んだよね']
+      ],
+      VERB: [
+        ['{v}ときの気持ち よく分かります', '{v}ときの気持ち 分かります', '{v}ときの気持ち 分かるよ'],
+        ['{v}ことを 自分に重ねてしまいました', '{v}ことを 自分に重ねちゃいました', '{v}ことを 自分に重ねちゃった'],
+        ['{v}ところで 同じ気持ちになりました', '{v}ところで 同じ気持ちになりましたよ', '{v}ところで 同じ気持ちになったよ'],
+        ['{v}の ぐっときました', '{v}の ぐっときちゃいました', '{v}の ぐっときた']
+      ] },
     { name: 'お礼を伝えたい', label1: 'お礼をまっすぐ伝える', numLine: false,
-      EMP: ['ありがとうございます 勉強になりました', 'ありがとうございます 参考になりました', 'ありがとう 助かった'],
-      EMP2: ['教えていただけて本当にありがたいです', '教えてもらえて助かりました', '教えてくれてほんと嬉しい'],
-      REACT: ['「{w}」のところ 特に参考になりました', '「{w}」のところ 助かりました', '「{w}」のとこ めっちゃ助かった'],
-      CLOSE: ['また参考にさせていただきます', 'また参考にさせてもらいます', 'また参考にするね'] },
+      EMP: [
+        ['ありがとうございます 勉強になりました', 'ありがとうございます 参考になりました', 'ありがとう 助かった'],
+        ['共有してくださって ありがたいです', '共有してくれて ありがたいです', '共有してくれて ありがたい'],
+        ['学びになりました', '学びになりましたよ', '学びになった'],
+        ['知らなかったので 助かります', '知らなかったので 助かりました', '知らなかったから 助かる']
+      ],
+      EMP2: [
+        ['教えていただけて本当にありがたいです', '教えてもらえて助かりました', '教えてくれてほんと嬉しい'],
+        ['さっそく試してみたいです', 'さっそく試してみます', 'さっそく試してみる'],
+        ['視野が広がりました', '視野が広がった気がします', '視野が広がった'],
+        ['心強いです', '心強いですね', '心強いな']
+      ],
+      REACT: [
+        ['「{w}」のところ 特に参考になりました', '「{w}」のところ 助かりました', '「{w}」のとこ めっちゃ助かった'],
+        ['特に「{w}」の話が 勉強になりました', '特に「{w}」の話が 役立ちそうです', '特に「{w}」の話 役に立ちそう'],
+        ['「{w}」を知れたのが 一番の収穫です', '「{w}」を知れたのが 一番の収穫ですね', '「{w}」を知れたのが 一番の収穫だった'],
+        ['「{w}」の部分 さっそく真似してみます', '「{w}」の部分 さっそく真似してみますね', '「{w}」の部分 さっそく真似してみる']
+      ],
+      CLOSE: [
+        ['また参考にさせていただきます', 'また参考にさせてもらいます', 'また参考にするね'],
+        ['お礼だけでも伝えたいと思いました', 'お礼だけでも伝えたくなりました', 'お礼だけでも伝えたかった'],
+        ['またぜひ教えてください', 'またぜひ教えてくださいね', 'またぜひ教えてね'],
+        ['感謝しています', '感謝してます', '感謝してるよ']
+      ],
+      EMO: [
+        ['{e}話を共有してくださって ありがとうございます', '{e}話を共有してくれて ありがとうございます', '{e}話を共有してくれて ありがとう'],
+        ['{e}ことを 正直に書いてくださって ありがとうございます', '{e}ことを 正直に書いてくれて ありがとうございます', '{e}ことを 正直に書いてくれて ありがとう'],
+        ['{e}気持ちまで 伝えてくださって 感謝です', '{e}気持ちまで 伝えてくれて 感謝です', '{e}気持ちまで 伝えてくれて 感謝'],
+        ['{e}話 参考になりました', '{e}話 参考になりましたよ', '{e}話 参考になった']
+      ],
+      VERB: [
+        ['{v}ことを 教えてくださって ありがとうございます', '{v}ことを 教えてくれて ありがとうございます', '{v}ことを 教えてくれて ありがとう'],
+        ['{v}話 とても参考になりました', '{v}話 すごく参考になりました', '{v}話 めっちゃ参考になった'],
+        ['{v}ところ 見習いたいです', '{v}ところ 見習いたいなと思いました', '{v}ところ 見習いたい'],
+        ['{v}のを知れて 励みになりました', '{v}のを知れて 励みになりましたよ', '{v}のを知れて 励みになった']
+      ] },
     { name: '質問したい', label1: '興味を伝える', numLine: false,
-      EMP: ['とても気になりました', '気になりました', '気になった'],
-      EMP2: ['もう少し知りたいと思いました', 'もっと知りたくなりました', 'もっと知りたい'],
-      REACT: ['「{w}」のところが特に気になりました', '「{w}」のところ気になりました', '「{w}」のとこ気になる'],
-      CLOSE: ['お時間のあるときに教えていただけたら嬉しいです', '余裕があるときに教えてもらえたら嬉しいです', '気が向いたとき教えて'] },
+      EMP: [
+        ['とても気になりました', '気になりました', '気になった'],
+        ['詳しく知りたくなりました', '詳しく知りたくなりましたよ', '詳しく知りたくなった'],
+        ['興味をひかれました', '興味をひかれましたね', '興味わいた'],
+        ['知らなかったので 気になります', '知らなかったので 気になりますね', '知らなかったから 気になる']
+      ],
+      EMP2: [
+        ['もう少し知りたいと思いました', 'もっと知りたくなりました', 'もっと知りたい'],
+        ['ひとつ聞いてみたくなりました', 'ひとつ聞いてみたくなっちゃいました', 'ひとつ聞いてみたくなった'],
+        ['気になって 思わず手が止まりました', '気になって 思わず手が止まっちゃいました', '気になって 思わず手が止まった'],
+        ['ぜひ背景を知りたいです', 'ぜひ背景を知りたいですね', 'ぜひ背景を知りたい']
+      ],
+      REACT: [
+        ['「{w}」のところが特に気になりました', '「{w}」のところ気になりました', '「{w}」のとこ気になる'],
+        ['「{w}」について もっと知りたいです', '「{w}」について もっと知りたくなりました', '「{w}」のこと もっと知りたい'],
+        ['特に「{w}」の部分に 興味をひかれました', '特に「{w}」の部分が 気になりました', '特に「{w}」の部分 気になった'],
+        ['「{w}」が頭に残っています', '「{w}」が頭に残ってます', '「{w}」が頭に残ってる']
+      ],
+      CLOSE: [
+        ['お時間のあるときに教えていただけたら嬉しいです', '余裕があるときに教えてもらえたら嬉しいです', '気が向いたとき教えて'],
+        ['急ぎではないので ご都合のよいときにお願いします', '急ぎじゃないので 余裕のあるときにお願いします', '急ぎじゃないから 気が向いたらでいいよ'],
+        ['答えにくければ 流していただいて大丈夫です', '答えにくければ 流してもらって大丈夫です', '答えにくかったら 流して大丈夫'],
+        ['教えていただけると とても助かります', '教えてもらえると 助かります', '教えてもらえると 助かる']
+      ],
+      EMO: [
+        ['{e}のは どんなときですか', '{e}のは どんなときなんですか', '{e}のは どんなとき'],
+        ['{e}ことって よくありますか', '{e}ことって よくあるんですか', '{e}ことって よくある'],
+        ['{e}ときのこと もう少し聞きたいです', '{e}ときのこと もう少し聞きたいなと思いました', '{e}ときのこと もう少し聞きたい'],
+        ['{e}ときは 何をされていますか', '{e}ときは 何をしてますか', '{e}ときは 何してる']
+      ],
+      VERB: [
+        ['{v}のは どんなきっかけでしたか', '{v}のは どんなきっかけだったんですか', '{v}のは どんなきっかけだった'],
+        ['{v}ときは どんな気持ちでしたか', '{v}ときは どんな気持ちだったんですか', '{v}ときは どんな気持ちだった'],
+        ['{v}ことで 変わったことはありますか', '{v}ことで 変わったことってありますか', '{v}ことで 変わったことある'],
+        ['{v}ところが 気になりました', '{v}ところが 気になっちゃいました', '{v}ところ 気になった']
+      ] },
     { name: '感想を伝えたい', label1: '感想をひとこと', numLine: true,
-      EMP: ['この投稿 心に残りました', '読んでいて楽しかったです', '読んでて楽しかった'],
-      EMP2: ['読み終わったあとも考えていました', '読み終わっても頭に残っています', '読んだあとも頭に残ってる'],
-      REACT: ['「{w}」のところが印象的でした', '「{w}」のところが好きです', '「{w}」のとこ好き'],
-      CLOSE: ['素敵な投稿をありがとうございます', 'いい投稿をありがとうございます', 'いい投稿ありがとう'] },
+      EMP: [
+        ['この投稿 心に残りました', 'この投稿 心に残っちゃいました', 'この投稿 心に残った'],
+        ['読んでいて 楽しかったです', '読んでいて 楽しかったですよ', '読んでて 楽しかった'],
+        ['じんわり残る投稿でした', 'じんわり残る投稿でしたね', 'じんわり残る投稿だった'],
+        ['最後まで 引き込まれました', '最後まで 引き込まれちゃいました', '最後まで 引き込まれた']
+      ],
+      EMP2: [
+        ['読み終わったあとも考えていました', '読み終わっても頭に残っています', '読んだあとも頭に残ってる'],
+        ['温度が伝わってくる文章でした', '温度が伝わってくる文章ですね', '温度が伝わってくる文章だった'],
+        ['何度か頭の中で反芻しています', '何度か思い出しています', '何度か思い出してる'],
+        ['気持ちがやわらかくなりました', '気持ちがやわらかくなった気がします', '気持ちがやわらかくなった']
+      ],
+      REACT: [
+        ['「{w}」のところが印象的でした', '「{w}」のところが好きです', '「{w}」のとこ好き'],
+        ['特に「{w}」に 心をつかまれました', '特に「{w}」に 心をつかまれましたよ', '特に「{w}」に 心をつかまれた'],
+        ['「{w}」の一言が 頭に残っています', '「{w}」の一言が 頭に残ってます', '「{w}」の一言が 頭に残ってる'],
+        ['「{w}」まわりの書き方 好きです', '「{w}」まわりの書き方 好きですね', '「{w}」まわりの書き方 好き']
+      ],
+      CLOSE: [
+        ['素敵な投稿をありがとうございます', 'いい投稿をありがとうございます', 'いい投稿ありがとう'],
+        ['読めてよかったです', '読めてよかったですよ', '読めてよかった'],
+        ['また投稿を楽しみにしています', 'また投稿を楽しみにしてますね', 'また投稿 楽しみにしてるね'],
+        ['いい時間をもらいました', 'いい時間をもらえましたよ', 'いい時間もらった']
+      ],
+      EMO: [
+        ['{e}のが 伝わってきて 引き込まれました', '{e}のが 伝わってきて 引き込まれちゃいました', '{e}のが 伝わってきて 引き込まれた'],
+        ['{e}ところ 正直で好きです', '{e}ところ 正直で好きですね', '{e}ところ 正直で好き'],
+        ['{e}という気持ちが まっすぐ届きました', '{e}という気持ちが まっすぐ届きましたよ', '{e}って気持ちが まっすぐ届いた'],
+        ['{e}ところの描写が 心に残りました', '{e}ところの描写が 心に残ってます', '{e}ところの描写が 心に残った']
+      ],
+      VERB: [
+        ['{v}ところが 一番印象に残りました', '{v}ところが 一番印象に残っています', '{v}ところが 一番印象に残った'],
+        ['{v}話 読んでいて元気が出ました', '{v}話 読んでて元気が出ました', '{v}話 読んでて元気が出た'],
+        ['{v}ことが 伝わる文章でした', '{v}ことが 伝わる文章でしたね', '{v}ことが 伝わる文章だった'],
+        ['{v}あたり 好きです', '{v}あたり 好きですね', '{v}あたり 好き']
+      ] },
     { name: '応援したい', label1: '応援を短く', numLine: true,
-      EMP: ['応援しています', '応援してます', '応援してる'],
-      EMP2: ['次の一歩も楽しみです', '次も楽しみです', '次も楽しみ'],
-      REACT: ['「{w}」のところ すごいと思いました', '「{w}」のところ すごいです', '「{w}」のとこ すごい'],
-      CLOSE: ['続きも楽しみにしています', '続きも楽しみです', '続きも楽しみ'] },
+      EMP: [
+        ['応援しています', '応援してます', '応援してる'],
+        ['陰ながら応援しています', '陰ながら応援してますね', '陰ながら応援してるね'],
+        ['こちらも元気をもらいました', 'こっちも元気をもらいました', 'こっちも元気もらった'],
+        ['この調子で いきましょう', 'この調子で いきましょうね', 'この調子でいこう']
+      ],
+      EMP2: [
+        ['次の一歩も楽しみです', '次も楽しみです', '次も楽しみ'],
+        ['無理のないペースで 続けてください', '無理のないペースで 続けてくださいね', '無理のないペースでね'],
+        ['これからが楽しみです', 'これからが楽しみですね', 'これから楽しみだね'],
+        ['見守っています', '見守ってます', '見守ってるよ']
+      ],
+      REACT: [
+        ['「{w}」のところ すごいと思いました', '「{w}」のところ すごいです', '「{w}」のとこ すごい'],
+        ['「{w}」に向き合う姿 かっこいいです', '「{w}」に向き合う姿 かっこいいですね', '「{w}」に向き合う姿 かっこいい'],
+        ['特に「{w}」の一言に 元気をもらいました', '特に「{w}」の一言に 元気をもらいましたよ', '特に「{w}」の一言に 元気もらった'],
+        ['「{w}」 応援しています', '「{w}」 応援してます', '「{w}」 応援してるね']
+      ],
+      CLOSE: [
+        ['続きも楽しみにしています', '続きも楽しみです', '続きも楽しみ'],
+        ['また報告を待っています', 'また報告を待ってますね', 'また報告待ってるね'],
+        ['無理せず進んでください', '無理せず進んでくださいね', '無理せず進んでね'],
+        ['お互い頑張りましょう', 'お互い頑張りましょうね', 'お互い頑張ろうね']
+      ],
+      EMO: [
+        ['{e}気持ちが 伝わってきました 応援しています', '{e}気持ちが 伝わってきました 応援してます', '{e}気持ちが 伝わってきたよ 応援してる'],
+        ['{e}の 伝わってきて こちらも元気が出ました', '{e}の 伝わってきて こっちも元気が出ました', '{e}の 伝わって こっちも元気出た'],
+        ['{e}気持ち 受け取りました 応援しています', '{e}気持ち 受け取りました 応援してます', '{e}気持ち 受け取った 応援してる'],
+        ['{e}ことも 正直に書いていて 応援したくなりました', '{e}ことも 正直に書いていて 応援したくなりましたよ', '{e}ことも 正直に書いてて 応援したくなった']
+      ],
+      VERB: [
+        ['{v}の すごいです', '{v}の すごいですね', '{v}の すごいね'],
+        ['{v}ところ かっこいいです', '{v}ところ かっこいいですよ', '{v}ところ かっこいい'],
+        ['{v}ことに 勇気をもらいました', '{v}ことに 勇気をもらいましたよ', '{v}ことに 勇気もらった'],
+        ['{v}の 見ていて元気が出ます', '{v}の 見ていて元気が出ますね', '{v}の 見てて元気が出る']
+      ] },
     { name: '自分の経験を添えたい', label1: '経験に寄り添う', numLine: false,
-      EMP: ['自分も似た経験があります', '自分も似た経験があります', '自分も似た経験あるよ'],
-      EMP2: ['自分に重ねて読んでいました', '自分に重ねて読んでました', '自分に重ねて読んじゃった'],
-      REACT: ['「{w}」のところ 自分にも覚えがあります', '「{w}」のところ 自分もそうでした', '「{w}」のとこ 自分もそうだった'],
-      CLOSE: ['少しでも何かの参考になれば嬉しいです', '何かの参考になれば嬉しいです', '参考になれば嬉しいな'] }
+      EMP: [
+        ['自分も似た経験があります', '自分も似た経験がありますよ', '自分も似た経験あるよ'],
+        ['私にも覚えがあります', '私にも覚えがありますね', '自分にも覚えがある'],
+        ['同じような場面を 経験したことがあります', '同じような場面を 経験したことがありますよ', '同じような場面 経験したことあるよ'],
+        ['他人事ではない気がします', '他人事ではない気がしますね', '他人事じゃない気がする']
+      ],
+      EMP2: [
+        ['自分に重ねて読んでいました', '自分に重ねて読んでました', '自分に重ねて読んじゃった'],
+        ['あのときの気持ちを 思い出しました', 'あのときの気持ちを 思い出しちゃいました', 'あのときの気持ち 思い出した'],
+        ['読みながら 昔の自分を思い出しました', '読みながら 昔の自分を思い出しましたよ', '読みながら 昔の自分を思い出した'],
+        ['他人事に思えませんでした', '他人事に思えなかったです', '他人事に思えなかった']
+      ],
+      REACT: [
+        ['「{w}」のところ 自分にも覚えがあります', '「{w}」のところ 自分もそうでした', '「{w}」のとこ 自分もそうだった'],
+        ['「{w}」と聞くと 自分の場合を思い出します', '「{w}」と聞くと 自分の場合を思い出しますね', '「{w}」って聞くと 自分の場合を思い出す'],
+        ['特に「{w}」は 自分にも重なります', '特に「{w}」は 自分にも重なりますよ', '特に「{w}」は 自分にも重なる'],
+        ['「{w}」 自分にも似た場面がありました', '「{w}」 自分にも似た場面ありました', '「{w}」 自分にも似た場面あった']
+      ],
+      CLOSE: [
+        ['少しでも何かの参考になれば嬉しいです', '何かの参考になれば嬉しいです', '参考になれば嬉しいな'],
+        ['ひとりではないと お伝えしたくなりました', 'ひとりじゃないと 伝えたくなりました', 'ひとりじゃないよって 伝えたくなった'],
+        ['また経験談を共有できたらと思います', 'また経験談を共有できたら嬉しいです', 'また話せたらいいな'],
+        ['うまくいくことを願っています', 'うまくいくこと願ってます', 'うまくいくこと願ってるよ']
+      ],
+      EMO: [
+        ['{e}の 自分にも覚えがあります', '{e}の 自分にも覚えがありますよ', '{e}の 自分にも覚えあるよ'],
+        ['{e}ことは 自分にもありました', '{e}ことは 自分にもありましたよ', '{e}こと 自分にもあった'],
+        ['{e}ときの気持ち 思い出しました', '{e}ときの気持ち 思い出しちゃいました', '{e}ときの気持ち 思い出した'],
+        ['{e}のは 自分もそうでした', '{e}のは 自分もそうでしたよ', '{e}の 自分もそうだった']
+      ],
+      VERB: [
+        ['{v}ときのこと 自分も思い出しました', '{v}ときのこと 自分も思い出しましたよ', '{v}ときのこと 自分も思い出した'],
+        ['{v}のは 自分にも覚えがあります', '{v}のは 自分にも覚えがありますよ', '{v}の 自分にも覚えあるよ'],
+        ['{v}話に 自分を重ねてしまいました', '{v}話に 自分を重ねちゃいました', '{v}話に 自分を重ねちゃった'],
+        ['{v}ところ 自分もそうでした', '{v}ところ 自分もそうでしたよ', '{v}ところ 自分もそうだった']
+      ] }
   ];
-  function fill(t, w, n) { return t.replace(/\{([wn])\}/g, function (m, k) { return k === 'w' ? w : n; }); }
+  function fill(t, w, n, e, v) { return t.replace(/\{([wnev])\}/g, function (m, k) { return k === 'w' ? w : k === 'n' ? n : k === 'e' ? e : v; }); }
 
-  // opts: { feeling: 0-5, dist: 0-2, word: string, num: string, memo: string } -> [{ type, text, needsMemo }] 3案
-  // 書き出しの挨拶(「はじめまして」など)は付けない。SNSの返信は、いきなり本題から入る
+  var SEEDS = 12; // 言い回しの巡回の長さ。乱数は使わず、番号(シード)だけで決める
+  function mod(s) { s = (s | 0) % SEEDS; return s < 0 ? s + SEEDS : s; }
+  function opener(t) { return Array.from(t.split('\n')[0]).slice(0, 4).join(''); }
+
+  // opts: { feeling: 0-5, dist: 0-2, word, num, memo, emo(気持ちの言葉の言い切り), verb(出来事の動詞), verbTone('pos'ならほめる言い方), question(投稿が質問か), seed, bump:[案1,案2,案3の追加] }
+  //   -> [{ type, text, needsMemo }] 3案。書き出しの挨拶(「はじめまして」など)は付けない。SNSの返信は、いきなり本題から入る
+  // 案ごとに1行の案と2行の案が混ざる。3案の書き出し(最初の4文字)は重ならないようにずらす
   function build(opts) {
     var f = FEELINGS[opts.feeling], d = opts.dist;
     var w = oneLine(opts.word || ''), n = oneLine(opts.num || ''), memo = clean(opts.memo || '');
-    var l1 = [w ? fill(f.REACT[d], w, n) : f.EMP[d], f.EMP2[d]];
-    if (n && f.numLine) l1.push(fill(NUMLINE[d], w, n));
-    var l2 = [w ? fill(QW[d], w, n) : Q[d]];
-    var l3 = []; if (memo) l3.push(memo); else l3.push(f.EMP[d]); l3.push(f.CLOSE[d]);
+    var e = oneLine(opts.emo || ''), v = oneLine(opts.verb || ''), q = !!opts.question;
+    var verbArr = opts.verbTone === 'pos' ? f.VERB : VERB_OTHER, emoArr = opts.emoTone === 'neg' ? EMO_NEG : f.EMO;
+    var base = mod(opts.seed), bump = opts.bump || [0, 0, 0];
+    // 同じ表から選ぶとき、直前の行と文末(最後の3文字。文末の「よ・ね」は除く)がそろわない言い回しを優先する
+    function tail(x) { return Array.from(x.replace(/[よねわ]$/, '')).slice(-3).join(''); }
+    function T(arr, s, k, prev) {
+      var len = arr.length, st = s + k * (1 + Math.floor(s / 4)), t = '';
+      for (var j = 0; j < len; j++) { t = fill(arr[(st + j) % len][d], w, n, e, v); if (!prev || tail(clean(t)) !== tail(clean(prev))) return t; }
+      return t;
+    }
     function join(a) { return clean(a.join('\n')); }
+    function last(a) { return a.length ? a[a.length - 1] : ''; }
+    var extra = [];
+    function plan1(s) {
+      var specs = [], exs = [];
+      if (w) specs.push([f.REACT, 0]);
+      if (e) specs.push([emoArr, 1]);
+      if (v) { if (specs.length < 2) specs.push([verbArr, 2]); else exs.push([verbArr, 2]); }
+      if (n && f.numLine) { if (specs.length < 2) specs.push([NUMLINE, 3]); else exs.push([NUMLINE, 3]); }
+      if (specs.length > 1 && Math.floor(s / 4) % 2 === 1) specs.reverse();
+      var target = s % 3 === 0 ? 1 : 2, lines = [];
+      specs.forEach(function (sp) { lines.push(T(sp[0], s, sp[1], last(lines))); });
+      if (!lines.length) lines.push(T(f.EMP, s, 0));
+      if (lines.length < target) lines.push(T(f.EMP2, s, 1, last(lines)));
+      extra = exs.map(function (sp) { return T(sp[0], s, sp[1]); });
+      return lines;
+    }
+    function plan2(s) {
+      var ql = q ? (w ? QAW : QA) : (w ? QW : Q);
+      if (s % 3 === 1) return [T(ql, s, 0)];
+      if (q) { var a = T(ql, s, 0); return [a, T(QA_TAIL, s, 1, a)]; }
+      var ack = T(f.EMP, s, 2);
+      return [ack, T(ql, s, 0, ack)];
+    }
+    function plan3(s) {
+      var lines = [];
+      if (memo) lines.push(memo);
+      for (var i = 0; i < extra.length && lines.length < 2; i++) lines.push(extra[i]);
+      var target = s % 3 === 2 ? 1 : 2;
+      if (!lines.length && target === 2) lines.push(T(f.EMP, s, 3));
+      if (!lines.length || lines.length < target) lines.push(T(f.CLOSE, s, 0, last(lines)));
+      return lines;
+    }
+    var s1 = mod(base + (bump[0] | 0)), t1 = join(plan1(s1));
+    var seenT = [t1], seenO = [opener(t1)];
+    function choose(fn, s0) {
+      var i, s, t;
+      for (i = 0; i < SEEDS; i++) { s = mod(s0 + i); t = join(fn(s)); if (seenT.indexOf(t) < 0 && seenO.indexOf(opener(t)) < 0) break; }
+      if (i === SEEDS) { for (i = 0; i < SEEDS; i++) { s = mod(s0 + i); t = join(fn(s)); if (seenT.indexOf(t) < 0) break; } }
+      seenT.push(t); seenO.push(opener(t));
+      return t;
+    }
+    var t2 = choose(plan2, mod(base + (bump[1] | 0))), t3 = choose(plan3, mod(base + (bump[2] | 0)));
     return [
-      { type: f.label1, text: join(l1), needsMemo: false },
-      { type: '質問を返す', text: join(l2), needsMemo: false },
-      { type: '自分の体験を一行足す', text: join(l3), needsMemo: !memo }
+      { type: f.label1, text: t1, needsMemo: false },
+      { type: q ? '質問に答える' : '質問を返す', text: t2, needsMemo: false },
+      { type: '自分の体験を一行足す', text: t3, needsMemo: !memo }
     ];
   }
   var LIMIT = 280;
@@ -458,7 +850,7 @@ var RD = (function () {
     }
     return res;
   }
-  return { units: units, chars: chars, clean: clean, oneLine: oneLine, pickWords: pickWords, build: build, FEELINGS: FEELINGS, DISTS: DISTS, LIMIT: LIMIT,
+  return { units: units, chars: chars, clean: clean, oneLine: oneLine, pickWords: pickWords, build: build, SEEDS: SEEDS, QA: QA, QAW: QAW, QA_TAIL: QA_TAIL, Q: Q, QW: QW, NUMLINE: NUMLINE, VERB_OTHER: VERB_OTHER, EMOS: EMOS, VERBS: VERBS, EMO_NEG: EMO_NEG, opener: opener, FEELINGS: FEELINGS, DISTS: DISTS, LIMIT: LIMIT,
     buildPrompt: buildPrompt, parsePlans: parsePlans, sanitizeAI: sanitizeAI, judge: judge, evaluate: evaluate, failCount: failCount, pickBest: pickBest, AI_MAX: AI_MAX, AI_MIN: AI_MIN };
 })();
 </script>
@@ -469,8 +861,8 @@ var RD = (function () {
   var $ = function (id) { return document.getElementById(id); };
   var postEl = $('post'), manualEl = $('manual'), memoEl = $('memo'), resEl = $('results'), statusEl = $('status');
   var SAMPLE = '今日 初めて3kmを走りきった。走るのが苦手だったので「完走」できただけで泣きそうになった #ランニング初心者';
-  var st = { feeling: 0, dist: 0, sel: -1, numOff: false };
-  var picks = { cands: [], num: '' };
+  var st = { feeling: 0, dist: 0, sel: -1, numOff: false, emo: -1, verb: -1, qOff: false, seed: 0, bump: [0, 0, 0] };
+  var picks = { cands: [], num: '', emos: [], verbs: [], question: false };
 
   function mkGroup(box, items, key, onPick) {
     box.textContent = '';
@@ -482,10 +874,10 @@ var RD = (function () {
     });
   }
   function buildCands() {
-    var box = $('cands'); box.textContent = '';
+    var box = $('cands'), fi = [].indexOf.call(box.children, document.activeElement); box.textContent = '';
     var picked = $('picked');
     picked.textContent = picks.cands.length ? '拾えた言葉: ' + picks.cands.length + '件（押して選び直せます）' : (postEl.value.trim() ? '拾えた言葉はありません（言葉なしの文を作ります）' : '投稿を貼ると、ここに拾った言葉が並びます');
-    if (picks.num) picked.textContent += ' ／ 数量: ' + picks.num + '（感想・応援の1案目に入ります）';
+    if (picks.num) picked.textContent += ' ／ 数量: ' + picks.num + '（感想・応援の案に入ります）';
     var all = picks.cands.map(function (c) { return { label: '「' + c.w + '」', kind: c.kind }; });
     if (picks.cands.length) all.push({ label: '言葉を入れない', kind: '' });
     var manualOn = !!RD.oneLine(manualEl.value);
@@ -504,11 +896,37 @@ var RD = (function () {
       nb.addEventListener('click', function () { st.numOff = !st.numOff; nb.setAttribute('aria-pressed', st.numOff ? 'true' : 'false'); renderResults(); });
       box.appendChild(nb);
     }
+    if (fi >= 0 && box.children[fi]) box.children[fi].focus();
   }
   function activeWord() {
     var m = RD.oneLine(manualEl.value);
     if (m) return m;
     return st.sel >= 0 && picks.cands[st.sel] ? picks.cands[st.sel].w : '';
+  }
+  function activeEmo() { return st.emo >= 0 && picks.emos[st.emo] ? picks.emos[st.emo] : null; }
+  function activeVerb() { return st.verb >= 0 && picks.verbs[st.verb] ? picks.verbs[st.verb] : null; }
+  function sigBtn(box, label, kind, pressed, onClick) {
+    var b = document.createElement('button'); b.type = 'button';
+    b.appendChild(document.createTextNode(label));
+    if (kind) { var k = document.createElement('span'); k.className = 'kind'; k.textContent = kind; b.appendChild(k); }
+    b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    b.addEventListener('click', onClick);
+    box.appendChild(b);
+  }
+  function buildSigs() {
+    var box = $('sigs'), info = $('sig-picked'), fi = [].indexOf.call(box.children, document.activeElement); box.textContent = '';
+    var parts = [];
+    if (!postEl.value.trim()) info.textContent = '投稿を貼ると、ここに拾った気持ちの言葉・出来事・質問が並びます';
+    else {
+      parts.push('気持ちの言葉 ' + picks.emos.length + '件'); parts.push('出来事 ' + picks.verbs.length + '件'); parts.push(picks.question ? '質問の形: あり（2案目を答えの形にします）' : '質問の形: なし');
+      info.textContent = '拾えたもの: ' + parts.join(' ／ ') + (picks.emos.length || picks.verbs.length || picks.question ? '（押して選び直せます）' : '（拾えなくても下書きは作れます）');
+    }
+    picks.emos.forEach(function (c, i) { sigBtn(box, '「' + c.w + '」', c.kind, st.emo === i, function () { st.emo = i; buildSigs(); renderResults(); }); });
+    if (picks.emos.length) sigBtn(box, '気持ちの言葉を入れない', '', st.emo === -1, function () { st.emo = -1; buildSigs(); renderResults(); });
+    picks.verbs.forEach(function (c, i) { sigBtn(box, '「' + c.w + '」', c.kind, st.verb === i, function () { st.verb = i; buildSigs(); renderResults(); }); });
+    if (picks.verbs.length) sigBtn(box, '出来事を入れない', '', st.verb === -1, function () { st.verb = -1; buildSigs(); renderResults(); });
+    if (picks.question) sigBtn(box, '質問への返事の形にしない', '', st.qOff, function () { st.qOff = !st.qOff; buildSigs(); renderResults(); });
+    if (fi >= 0 && box.children[fi]) box.children[fi].focus(); // 押したボタンの位置にフォーカスを戻す
   }
   function say(t) { statusEl.textContent = t; }
 
@@ -531,32 +949,62 @@ var RD = (function () {
     else fallback();
   }
   function fit(ta) { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 2) + 'px'; }
+  function buildOpts() {
+    var em = activeEmo(), vb = activeVerb();
+    return { feeling: st.feeling, dist: st.dist, word: activeWord(), num: st.numOff ? '' : picks.num, memo: memoEl.value,
+      emo: em ? em.w : '', emoTone: em ? em.tone : '', verb: vb ? vb.w : '', verbTone: vb ? vb.tone : '', question: picks.question && !st.qOff, seed: st.seed, bump: st.bump.slice() };
+  }
+  function seedNote() { $('again-n').textContent = '言い回し ' + (st.seed + 1) + '/' + RD.SEEDS + '（押すたびに順番に切り替わります）' + (st.bump.some(function (x) { return x; }) ? ' ／ 案ごとに切り替えた案があります' : ''); }
+  // 1枚の案のカード。isAI: AIの案か
+  function makeCard(i, p, text, isAI) {
+    var card = document.createElement('div'); card.className = 'card';
+    var h = document.createElement('h3'); var no = document.createElement('span'); no.className = 'no'; no.textContent = '案' + (i + 1);
+    h.appendChild(no); h.appendChild(document.createTextNode(p.type));
+    if (isAI) { var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = 'AIの案'; h.appendChild(bd); }
+    card.appendChild(h);
+    var ta = document.createElement('textarea'); ta.id = 'plan' + (i + 1); ta.value = text; ta.rows = Math.max(3, text.split('\n').length + 1); ta.setAttribute('aria-label', '案' + (i + 1) + '（' + p.type + (isAI ? '・AIの案' : '') + '）の返信'); card.appendChild(ta);
+    var stats = document.createElement('p'); stats.className = 'stats'; card.appendChild(stats);
+    var warn = document.createElement('p'); warn.className = 'warn'; warn.hidden = true; card.appendChild(warn);
+    if (isAI) { var ah = document.createElement('p'); ah.className = 'hint ai-note'; ah.textContent = 'このPCのOllamaが作った案です。事実と違う点がないか、送る前に読んでください'; card.appendChild(ah); }
+    else if (p.needsMemo) { var hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '一言メモを書くと、この案に自分の一行が入ります。今のままでは何の話か伝わりにくい案です'; card.appendChild(hint); }
+    if (!isAI && (st.feeling === 0 || st.feeling === 5)) { var own = document.createElement('p'); own.className = 'hint'; own.textContent = 'この案は、あなた自身にも当てはまることを前提にしています。違う場合は消すか、直してください'; card.appendChild(own); }
+    var btn = document.createElement('button'); btn.type = 'button'; btn.className = 'primary'; btn.textContent = '案' + (i + 1) + 'をコピー'; card.appendChild(btn);
+    var again = document.createElement('button'); again.type = 'button'; again.className = 'sub again-one'; again.textContent = '案' + (i + 1) + 'だけ別の言い方で'; card.appendChild(again);
+    countsText(ta, stats, warn);
+    ta.addEventListener('input', function () { countsText(ta, stats, warn); fit(ta); });
+    btn.addEventListener('click', function () { copy(ta, i + 1); });
+    again.addEventListener('click', function () {
+      if (gen) { say('AIの作成中です。終わるか、中止してから押してください'); return; }
+      // 今の案・ほかの案と同じ文にならない言い回しまで順に送る(最大1巡)
+      var cur = card.querySelector('textarea').value, others = [].slice.call(resEl.querySelectorAll('textarea')).map(function (x) { return x.value; });
+      others.splice(i, 1);
+      var openers = others.map(RD.opener), ps, tries = 0, weak = -1, found = false;
+      while (tries < RD.SEEDS && !found) {
+        st.bump[i] = (st.bump[i] + 1) % RD.SEEDS; ps = RD.build(buildOpts()); tries++;
+        if (ps[i].text !== cur && others.indexOf(ps[i].text) < 0) { if (openers.indexOf(RD.opener(ps[i].text)) < 0) found = true; else if (weak < 0) weak = st.bump[i]; }
+      }
+      if (!found && weak >= 0) { st.bump[i] = weak; ps = RD.build(buildOpts()); }
+      var same = ps[i].text === cur;
+      aiSet('');
+      var nc = makeCard(i, ps[i], ps[i].text, false);
+      resEl.replaceChild(nc, card); fit(nc.querySelector('textarea')); seedNote();
+      nc.querySelector('.again-one').focus(); say(same ? '案' + (i + 1) + 'は、これ以上の言い換えがありません' : '案' + (i + 1) + 'だけ別の言い方にしました');
+    });
+    return card;
+  }
   // ai: 案ごとのAIの案の文章(null=ルールベースの案のまま)。省略時はルールベースだけ
   function renderResults(ai) {
     var aborted = false;
     if (!ai) { if (gen) { abortGen('条件が変わったため、AIの作成を中止しました'); aborted = true; } else aiSet(''); }
-    var plans = RD.build({ feeling: st.feeling, dist: st.dist, word: activeWord(), num: st.numOff ? '' : picks.num, memo: memoEl.value });
+    var plans = RD.build(buildOpts());
     resEl.textContent = ''; if (!ai && !aborted) say('');
     plans.forEach(function (p, i) {
       var isAI = !!(ai && ai[i]);
-      var text = isAI ? ai[i] : p.text;
-      var card = document.createElement('div'); card.className = 'card';
-      var h = document.createElement('h3'); var no = document.createElement('span'); no.className = 'no'; no.textContent = '案' + (i + 1);
-      h.appendChild(no); h.appendChild(document.createTextNode(p.type));
-      if (isAI) { var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = 'AIの案'; h.appendChild(bd); }
-      card.appendChild(h);
-      var ta = document.createElement('textarea'); ta.id = 'plan' + (i + 1); ta.value = text; ta.rows = Math.max(3, text.split('\n').length + 1); ta.setAttribute('aria-label', '案' + (i + 1) + '（' + p.type + (isAI ? '・AIの案' : '') + '）の返信'); card.appendChild(ta);
-      var stats = document.createElement('p'); stats.className = 'stats'; card.appendChild(stats);
-      var warn = document.createElement('p'); warn.className = 'warn'; warn.hidden = true; card.appendChild(warn);
-      if (isAI) { var ah = document.createElement('p'); ah.className = 'hint ai-note'; ah.textContent = 'このPCのOllamaが作った案です。事実と違う点がないか、送る前に読んでください'; card.appendChild(ah); }
-      else if (p.needsMemo) { var hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '一言メモを書くと、この案に自分の一行が入ります。今のままでは何の話か伝わりにくい案です'; card.appendChild(hint); }
-      var btn = document.createElement('button'); btn.type = 'button'; btn.className = 'primary'; btn.textContent = '案' + (i + 1) + 'をコピー'; card.appendChild(btn);
-      countsText(ta, stats, warn);
-      ta.addEventListener('input', function () { countsText(ta, stats, warn); fit(ta); });
-      btn.addEventListener('click', function () { copy(ta, i + 1); });
+      var card = makeCard(i, p, isAI ? ai[i] : p.text, isAI);
       resEl.appendChild(card);
-      fit(ta);
+      fit(card.querySelector('textarea'));
     });
+    seedNote();
   }
 
   /* ---- Ollama強化モード(任意)。通信先は localhost:11434 だけ ---- */
@@ -670,19 +1118,30 @@ var RD = (function () {
   aiStop.addEventListener('click', function () { abortGen('中止しました。ルールベースの案のままです'); });
   $('ai-recheck').addEventListener('click', function () { runDetect($('ai-recheck-state')); });
 
+  function keepIdx(list, prevW, wasNone) {
+    if (!list.length) return -1;
+    var keep = -1; if (prevW !== null) list.forEach(function (c, i) { if (c.w === prevW) keep = i; });
+    return keep >= 0 ? keep : (wasNone ? -1 : 0);
+  }
   function onPost() {
     var prevWord = st.sel >= 0 && picks.cands[st.sel] ? picks.cands[st.sel].w : null, wasNone = st.sel === -1 && picks.cands.length > 0;
+    var pe = activeEmo(), pv = activeVerb(), eNone = st.emo === -1 && picks.emos.length > 0, vNone = st.verb === -1 && picks.verbs.length > 0;
     picks = RD.pickWords(postEl.value);
     var keep = -1;
     if (prevWord !== null) picks.cands.forEach(function (c, i) { if (c.w === prevWord) keep = i; });
     st.sel = picks.cands.length ? (keep >= 0 ? keep : (wasNone ? -1 : 0)) : -1;
-    buildCands(); renderResults(); syncAiBtn();
+    st.emo = keepIdx(picks.emos, pe ? pe.w : null, eNone); st.verb = keepIdx(picks.verbs, pv ? pv.w : null, vNone);
+    buildCands(); buildSigs(); renderResults(); syncAiBtn();
   }
   postEl.addEventListener('input', onPost);
   manualEl.addEventListener('input', function () { buildCands(); renderResults(); });
   memoEl.addEventListener('input', renderResults);
   $('sample').addEventListener('click', function () { postEl.value = SAMPLE; manualEl.value = ''; onPost(); });
-  $('clear').addEventListener('click', function () { postEl.value = ''; manualEl.value = ''; memoEl.value = ''; st.feeling = 0; st.dist = 0; st.numOff = false; st.sel = -1; init(); });
+  $('again').addEventListener('click', function () {
+    if (gen) { say('AIの作成中です。終わるか、中止してから押してください'); return; }
+    st.seed = (st.seed + 1) % RD.SEEDS; st.bump = [0, 0, 0]; renderResults(); say('3案とも別の言い方にしました');
+  });
+  $('clear').addEventListener('click', function () { postEl.value = ''; manualEl.value = ''; memoEl.value = ''; st.feeling = 0; st.dist = 0; st.numOff = false; st.sel = -1; st.emo = -1; st.verb = -1; st.qOff = false; st.seed = 0; st.bump = [0, 0, 0]; init(); });
 
   function init() {
     mkGroup($('feelings'), RD.FEELINGS, 'feeling', renderResults);
